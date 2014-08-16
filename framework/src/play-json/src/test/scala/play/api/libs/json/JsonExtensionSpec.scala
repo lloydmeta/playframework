@@ -6,8 +6,10 @@ package play.api.libs.json
 import org.specs2.mutable._
 import play.api.libs.json._
 import play.api.libs.json.Json._
+import play.api.libs.json.util.LazyHelper
 
 case class User(age: Int, name: String)
+
 case class Dog(name: String, master: User)
 
 case class Cat(name: String)
@@ -103,11 +105,11 @@ object JsonExtensionSpec extends Specification {
 
       Json.fromJson[Dog](
         Json.obj(
-          "name" -> "medor", 
+          "name" -> "medor",
           "master" -> Json.obj("name" -> "toto", "age" -> 45)
         )
       ) must beEqualTo(JsSuccess(Dog("medor", User(45, "toto"))))
-      
+
     }
 
     "create a writes[Dog]" in {
@@ -118,7 +120,7 @@ object JsonExtensionSpec extends Specification {
 
       Json.toJson(Dog("medor", User(45, "toto"))) must beEqualTo(
         Json.obj(
-          "name" -> "medor", 
+          "name" -> "medor",
           "master" -> Json.obj("name" -> "toto", "age" -> 45)
         )
       )
@@ -132,14 +134,14 @@ object JsonExtensionSpec extends Specification {
 
       Json.fromJson[Dog](
         Json.obj(
-          "name" -> "medor", 
+          "name" -> "medor",
           "master" -> Json.obj("name" -> "toto", "age" -> 45)
         )
       ) must beEqualTo(JsSuccess(Dog("medor", User(45, "toto"))))
 
       Json.toJson(Dog("medor", User(45, "toto"))) must beEqualTo(
         Json.obj(
-          "name" -> "medor", 
+          "name" -> "medor",
           "master" -> Json.obj("name" -> "toto", "age" -> 45)
         )
       )
@@ -153,7 +155,7 @@ object JsonExtensionSpec extends Specification {
 
       Json.fromJson[RecUser](
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "cat" -> Json.obj("name" -> "minou"),
           "hobbies" -> Json.arr("bobsleig", "manhunting"),
           "friends" -> Json.arr(Json.obj( "name" -> "tom", "hobbies" -> Json.arr(), "friends" -> Json.arr() ))
@@ -161,7 +163,7 @@ object JsonExtensionSpec extends Specification {
       ) must beEqualTo(
         JsSuccess(
           RecUser(
-            "bob", 
+            "bob",
             Some(Cat("minou")),
             List("bobsleig", "manhunting"),
             List(RecUser("tom"))
@@ -179,14 +181,14 @@ object JsonExtensionSpec extends Specification {
 
       Json.toJson(
         RecUser(
-          "bob", 
+          "bob",
           Some(Cat("minou")),
           List("bobsleig", "manhunting"),
           List(RecUser("tom"))
         )
       ) must beEqualTo(
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "cat" -> Json.obj("name" -> "minou"),
           "hobbies" -> Json.arr("bobsleig", "manhunting"),
           "friends" -> Json.arr(Json.obj( "name" -> "tom", "hobbies" -> Json.arr(), "friends" -> Json.arr() ))
@@ -203,7 +205,7 @@ object JsonExtensionSpec extends Specification {
 
       Json.fromJson[RecUser](
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "cat" -> Json.obj("name" -> "minou"),
           "hobbies" -> Json.arr("bobsleig", "manhunting"),
           "friends" -> Json.arr(Json.obj( "name" -> "tom", "hobbies" -> Json.arr(), "friends" -> Json.arr() ))
@@ -211,7 +213,7 @@ object JsonExtensionSpec extends Specification {
       ) must beEqualTo(
         JsSuccess(
           RecUser(
-            "bob", 
+            "bob",
             Some(Cat("minou")),
             List("bobsleig", "manhunting"),
             List(RecUser("tom"))
@@ -221,14 +223,14 @@ object JsonExtensionSpec extends Specification {
 
       Json.toJson(
         RecUser(
-          "bob", 
+          "bob",
           Some(Cat("minou")),
           List("bobsleig", "manhunting"),
           List(RecUser("tom"))
         )
       ) must beEqualTo(
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "cat" -> Json.obj("name" -> "minou"),
           "hobbies" -> Json.arr("bobsleig", "manhunting"),
           "friends" -> Json.arr(Json.obj( "name" -> "tom", "hobbies" -> Json.arr(), "friends" -> Json.arr() ))
@@ -244,13 +246,13 @@ object JsonExtensionSpec extends Specification {
 
       Json.fromJson[User1](
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "friend" -> Json.obj( "name" -> "tom" )
         )
       ) must beEqualTo(
         JsSuccess(
           User1(
-            "bob", 
+            "bob",
             Some(User1("tom"))
           )
         )
@@ -265,12 +267,12 @@ object JsonExtensionSpec extends Specification {
 
       Json.toJson(
         User1(
-          "bob", 
+          "bob",
           Some(User1("tom"))
         )
       ) must beEqualTo(
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "friend" -> Json.obj( "name" -> "tom" )
         )
       )
@@ -284,13 +286,13 @@ object JsonExtensionSpec extends Specification {
 
       Json.fromJson[User1](
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "friend" -> Json.obj( "name" -> "tom" )
         )
       ) must beEqualTo(
         JsSuccess(
           User1(
-            "bob", 
+            "bob",
             Some(User1("tom"))
           )
         )
@@ -298,16 +300,67 @@ object JsonExtensionSpec extends Specification {
 
       Json.toJson(
         User1(
-          "bob", 
+          "bob",
           Some(User1("tom"))
         )
       ) must beEqualTo(
         Json.obj(
-          "name" -> "bob", 
+          "name" -> "bob",
           "friend" -> Json.obj( "name" -> "tom" )
         )
       )
 
+    }
+
+    "create a writes[UserWithFields]" in {
+      import play.api.libs.json.Json
+
+      case class UserWithFields(age: Int, name: String) {
+        val ageWithName: String = s"$age $name"
+        var ageWithNameVar: String = s"$age $name"
+        def test(x: Int): Int = x + 999 // This should be ignored
+      }
+
+      // The following shouldn't crash the compiler
+      implicit val user1Writes = writesWithGetters[User1]
+      implicit val catWrites = writesWithGetters[Cat]
+      implicit val recUserWrites = writesWithGetters[RecUser]
+      implicit val userWithFieldWrites = writesWithGetters[UserWithFields]
+      implicit val userMapFieldWrites = writesWithGetters[UserMap]
+
+      val userWithField = UserWithFields(age = 10, name = "Billy")
+      val userMap = UserMap("toto", Map("tutu" -> UserMap("tutu")))
+
+      ( Json.obj(
+        "age" -> 10,
+        "ageWithNameVar" -> "10 Billy",
+        "ageWithName" -> "10 Billy",
+        "name" -> "Billy")
+       ) must beEqualTo(
+        Json.toJson(userWithField)
+      )
+
+      (
+        Json.obj("name" -> "toto", "friends" -> Json.obj("tutu" -> Json.obj("name" -> "tutu", "friends" -> Json.obj())))
+      ) must beEqualTo(
+        Json.toJson(userMap)
+      )
+
+      Json.toJson(
+        RecUser(
+          "bob",
+          Some(Cat("minou")),
+          List("bobsleig", "manhunting"),
+          List(RecUser("tom"))
+        )
+      ) must beEqualTo(
+        Json.obj(
+          "name" -> "bob",
+          "cat" -> Json.obj("name" -> "minou"),
+          "hobbies" -> Json.arr("bobsleig", "manhunting"),
+          "friends" -> Json.arr(Json.obj( "name" -> "tom", "hobbies" -> Json.arr(), "friends" -> Json.arr() ))
+        )
+      )
     }
 
     "manage Map[String, User]" in {
@@ -325,7 +378,7 @@ object JsonExtensionSpec extends Specification {
     "manage Boxed class" in {
       import play.api.libs.functional.syntax._
 
-      implicit def idReads[A](implicit rds: Reads[A]): Reads[Id[A]] = 
+      implicit def idReads[A](implicit rds: Reads[A]): Reads[Id[A]] =
         Reads[Id[A]] { js => rds.reads(js).map( Id[A](_) ) }
 
       //val c2Reads1 = Json.reads[C2]
@@ -350,14 +403,14 @@ object JsonExtensionSpec extends Specification {
 
       success
     }*/
-    "test 21 fields" in {      
+    "test 21 fields" in {
       implicit val XReads = Json.reads[X]
       implicit val XWrites = Json.writes[X]
       implicit val XFormat = Json.format[X]
       success
     }
 
-    "test inception with overriden object" in {      
+    "test inception with overriden object" in {
       implicit val programFormat = Json.reads[Program]
       success
     }
@@ -406,11 +459,11 @@ object JsonExtensionSpec extends Specification {
 
       val js = Json.obj("name" -> Json.arr(
         Json.obj(
-          "name" -> "medor", 
+          "name" -> "medor",
           "master" -> Json.obj("name" -> "toto", "age" -> 45)
         ),
         Json.obj(
-          "name" -> "brutus", 
+          "name" -> "brutus",
           "master" -> Json.obj("name" -> "tata", "age" -> 23)
         )
       ))
@@ -431,6 +484,6 @@ object JsonExtensionSpec extends Specification {
       Json.fromJson[Person2](Json.toJson(Person2(List("bob", "bobby")))).get must beEqualTo(Person2(List("bob", "bobby")))
     }
 
-  }    
+  }
 
 }

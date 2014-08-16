@@ -4,10 +4,37 @@
 package play.api.libs.json
 
 import scala.language.higherKinds
-import scala.reflect.macros.Context
+import scala.reflect.macros._
 import language.experimental.macros
 
 object JsMacroImpl {
+
+  // <-- Package references
+  private def libsPkg(c: Context): c.universe.Select = {
+    import c.universe._
+    Select(Select(Ident(newTermName("play")), newTermName("api")), newTermName("libs"))
+  }
+
+  private def jsonPkg(c: Context): c.universe.Select = {
+    import c.universe._
+    Select(libsPkg(c), newTermName("json"))
+  }
+
+  private def functionalSyntaxPkg(c: Context) = {
+    import c.universe._
+    Select(Select(libsPkg(c), newTermName("functional")), newTermName("syntax"))
+  }
+
+  private def utilPkg(c: Context) = {
+    import c.universe._
+    Select(jsonPkg(c), newTermName("util"))
+  }
+
+  private def lazyHelper(c: Context) = {
+    import c.universe._
+    Select(utilPkg(c), newTypeName("LazyHelper"))
+  }
+  // Package references -->
 
   def formatImpl[A: c.WeakTypeTag](c: Context): c.Expr[Format[A]] =
     macroImpl[A, Format](c, "format", "inmap", reads = true, writes = true)
@@ -18,10 +45,48 @@ object JsMacroImpl {
   def writesImpl[A: c.WeakTypeTag](c: Context): c.Expr[Writes[A]] =
     macroImpl[A, Writes](c, "write", "contramap", reads = false, writes = true)
 
-  def macroImpl[A, M[_]](c: Context, methodName: String, mapLikeMethod: String, reads: Boolean, writes: Boolean)(implicit atag: c.WeakTypeTag[A], matag: c.WeakTypeTag[M[A]]): c.Expr[M[A]] = {
+  def writesWithGettersImpl[A: c.WeakTypeTag](c: Context): c.Expr[Writes[A]] = {
+    import c.universe._
+    import c.universe.Flag._
 
-    val nullableMethodName = s"${methodName}Nullable"
-    val lazyMethodName = s"lazy${methodName.capitalize}"
+    val typeToWrite = c.weakTypeOf[A]
+    val getterMethodReturnTypeSymbols = for {
+      memberSymbol <- typeToWrite.members
+      term = memberSymbol.asTerm
+      if !term.isPrivate && term.isGetter
+    } yield memberSymbol
+    if (getterMethodReturnTypeSymbols.isEmpty)
+      c.abort(c.enclosingPosition, s"${typeToWrite} has no getters. Are you using the right class?")
+    val getterMethodTerms = getterMethodReturnTypeSymbols.map(_.asTerm)
+
+    val (canBuildFrom, hasRec) = canBuildTree[A, Writes](c)(methodName = "write", reads = false, writes = true, typeToWrite = typeToWrite.typeSymbol, accessorSymbols = getterMethodReturnTypeSymbols)
+
+    val objectTerm = newTermName("o")
+    val objectIdent = Ident(objectTerm)
+
+    val unapplyTuple = getterMethodTerms.map { term => Select(objectIdent, term) }
+    val unapply = Function(
+      List(ValDef(Modifiers(PARAM), objectTerm, TypeTree(typeToWrite), EmptyTree)),
+      Apply(
+        Ident(newTermName("Some")),
+        unapplyTuple.toList
+      )
+    )
+
+    val applier = newTermName(if (getterMethodTerms.size > 1) "apply" else "contramap")
+    val unliftIdent = Select(functionalSyntaxPkg(c), newTermName("unlift"))
+    val finalTree = Apply(
+      Select(canBuildFrom, applier),
+      List(
+        Apply(unliftIdent, List(unapply))
+      )
+    )
+
+    val block = buildFinalBlock[A, Writes](c)(finalTree, hasRec)
+    c.Expr[Writes[A]](block)
+  }
+
+  def macroImpl[A, M[_]](c: Context, methodName: String, mapLikeMethod: String, reads: Boolean, writes: Boolean)(implicit atag: c.WeakTypeTag[A], matag: c.WeakTypeTag[M[A]]): c.Expr[M[A]] = {
 
     def conditionalList[T](ifReads: T, ifWrites: T): List[T] =
       (if (reads) List(ifReads) else Nil) :::
@@ -34,16 +99,7 @@ object JsMacroImpl {
     val companionSymbol = companioned.companionSymbol
     val companionType = companionSymbol.typeSignature
 
-    val libsPkg = Select(Select(Ident(newTermName("play")), newTermName("api")), newTermName("libs"))
-    val jsonPkg = Select(libsPkg, newTermName("json"))
-    val functionalSyntaxPkg = Select(Select(libsPkg, newTermName("functional")), newTermName("syntax"))
-    val utilPkg = Select(jsonPkg, newTermName("util"))
-
-    val jsPathSelect = Select(jsonPkg, newTermName("JsPath"))
-    val readsSelect = Select(jsonPkg, newTermName("Reads"))
-    val writesSelect = Select(jsonPkg, newTermName("Writes"))
-    val unliftIdent = Select(functionalSyntaxPkg, newTermName("unlift"))
-    val lazyHelperSelect = Select(utilPkg, newTypeName("LazyHelper"))
+    val unliftIdent = Select(functionalSyntaxPkg(c), newTermName("unlift"))
 
     val unapply =
       companionType.declaration(stringToTermName("unapply")) match {
@@ -88,14 +144,69 @@ object JsMacroImpl {
 
     //println("apply found:" + apply)
 
+    // builds the final M[A] using apply method
+    //val applyMethod = Ident( companionSymbol )
+    val applyMethod =
+      Function(
+        params.foldLeft(List[ValDef]())((l, e) =>
+          l :+ ValDef(Modifiers(PARAM), newTermName(e.name.encoded), TypeTree(), EmptyTree)
+        ),
+        Apply(
+          Select(Ident(companionSymbol), newTermName("apply")),
+          params.foldLeft(List[Tree]())((l, e) =>
+            l :+ Ident(newTermName(e.name.encoded))
+          )
+        )
+      )
+
+    val unapplyMethod = Apply(
+      unliftIdent,
+      List(
+        Select(Ident(companionSymbol), unapply.name)
+      )
+    )
+
+    val (canBuildFrom, hasRec) = canBuildTree[A, M](c)(methodName, reads, writes, companioned, params)
+
+    // if case class has one single field, needs to use inmap instead of canbuild.apply
+    val method = if (params.length > 1) "apply" else mapLikeMethod
+    val finalTree = Apply(
+      Select(canBuildFrom, newTermName(method)),
+      conditionalList(applyMethod, unapplyMethod)
+    )
+    //println("finalTree: "+finalTree)
+
+    val block = buildFinalBlock[A, M](c)(finalTree, hasRec)
+    c.Expr[M[A]](block)
+  }
+
+  private def canBuildTree[A, M[_]](c: Context)(methodName: String,
+    reads: Boolean,
+    writes: Boolean,
+    typeToWrite: c.universe.Symbol,
+    accessorSymbols: Iterable[c.universe.Symbol])(implicit atag: c.WeakTypeTag[A], matag: c.WeakTypeTag[M[A]]): (c.universe.Apply, Boolean) = {
+
+    import c.universe._
+
+    def conditionalList[T](ifReads: T, ifWrites: T): List[T] =
+      (if (reads) List(ifReads) else Nil) :::
+        (if (writes) List(ifWrites) else Nil)
+
+    val nullableMethodName = s"${methodName}Nullable"
+    val lazyMethodName = s"lazy${methodName.capitalize}"
+
+    val jsPathSelect = Select(jsonPkg(c), newTermName("JsPath"))
+    val readsSelect = Select(jsonPkg(c), newTermName("Reads"))
+    val writesSelect = Select(jsonPkg(c), newTermName("Writes"))
+
     final case class Implicit(paramName: Name, paramType: Type, neededImplicit: Tree, isRecursive: Boolean, tpe: Type)
 
-    val inferredImplicits = params.map { param =>
+    val inferredImplicits = accessorSymbols.map { accessorSymbol =>
 
-      val implType = param.typeSignature
+      val implType = if (accessorSymbol.isMethod) accessorSymbol.asMethod.returnType else accessorSymbol.typeSignature
       val (isRecursive, tpe) = implType match {
         case TypeRef(_, t, args) =>
-          val isRec = args.exists(_.typeSymbol == companioned)
+          val isRec = args.exists(_.typeSymbol == typeToWrite)
           // Option[_] needs special treatment because we need to use XXXOpt
           val tp = if (implType.typeConstructor <:< typeOf[Option[_]].typeConstructor) args.head else implType
           (isRec, tp)
@@ -107,7 +218,7 @@ object JsMacroImpl {
       val neededImplicitType = appliedType(matag.tpe.typeConstructor, tpe :: Nil)
       // infers implicit
       val neededImplicit = c.inferImplicitValue(neededImplicitType)
-      Implicit(param.name, implType, neededImplicit, isRecursive, tpe)
+      Implicit(accessorSymbol.name, implType, neededImplicit, isRecursive, tpe)
     }
 
     //println("Found implicits:"+inferredImplicits)
@@ -168,45 +279,20 @@ object JsMacroImpl {
         List(r)
       )
     }
+    //println(s"canBuildTree returns: $canBuild, $hasRec")
+    (canBuild, hasRec)
+  }
 
-    // builds the final M[A] using apply method
-    //val applyMethod = Ident( companionSymbol )
-    val applyMethod =
-      Function(
-        params.foldLeft(List[ValDef]())((l, e) =>
-          l :+ ValDef(Modifiers(PARAM), newTermName(e.name.encoded), TypeTree(), EmptyTree)
-        ),
-        Apply(
-          Select(Ident(companionSymbol), newTermName("apply")),
-          params.foldLeft(List[Tree]())((l, e) =>
-            l :+ Ident(newTermName(e.name.encoded))
-          )
-        )
-      )
-
-    val unapplyMethod = Apply(
-      unliftIdent,
-      List(
-        Select(Ident(companionSymbol), unapply.name)
-      )
-    )
-
-    // if case class has one single field, needs to use inmap instead of canbuild.apply
-    val method = if (params.length > 1) "apply" else mapLikeMethod
-    val finalTree = Apply(
-      Select(canBuild, newTermName(method)),
-      conditionalList(applyMethod, unapplyMethod)
-    )
-    //println("finalTree: "+finalTree)
-
-    val importFunctionalSyntax = Import(functionalSyntaxPkg, List(ImportSelector(nme.WILDCARD, -1, null, -1)))
+  private def buildFinalBlock[A, M[_]](c: Context)(finalTree: c.universe.Tree, hasRec: Boolean)(implicit atag: c.WeakTypeTag[A], matag: c.WeakTypeTag[M[A]]) = {
+    import c.universe._
+    val lazyHelperSelect = lazyHelper(c)
+    val importFunctionalSyntax = Import(functionalSyntaxPkg(c), List(ImportSelector(nme.WILDCARD, -1, null, -1)))
     if (!hasRec) {
       val block = Block(
         importFunctionalSyntax,
         finalTree
       )
-      //println("block:"+block)
-      c.Expr[M[A]](block)
+      block
     } else {
       val helper = newTermName("helper")
       val helperVal = ValDef(
@@ -261,10 +347,8 @@ object JsMacroImpl {
         ),
         newTermName("lazyStuff")
       )
-
       //println("block:"+block)
-
-      c.Expr[M[A]](block)
+      block
     }
   }
 }
