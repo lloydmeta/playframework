@@ -50,26 +50,30 @@ object JsMacroImpl {
     import c.universe.Flag._
 
     val typeToWrite = c.weakTypeOf[A]
-    val getterMethodReturnTypeSymbols = for {
+    val getterMethodSymbols = for {
       memberSymbol <- typeToWrite.members
       term = memberSymbol.asTerm
-      if !term.isPrivate && term.isGetter
+      if term.isPublic && term.isGetter
     } yield memberSymbol
-    if (getterMethodReturnTypeSymbols.isEmpty)
+    if (getterMethodSymbols.isEmpty)
       c.abort(c.enclosingPosition, s"${typeToWrite} has no getters. Are you using the right class?")
-    val getterMethodTerms = getterMethodReturnTypeSymbols.map(_.asTerm)
+    val getterMethodTerms = getterMethodSymbols.map(_.asTerm)
 
-    val (canBuildFrom, hasRec) = canBuildTree[A, Writes](c)(methodName = "write", reads = false, writes = true, typeToWrite = typeToWrite.typeSymbol, accessorSymbols = getterMethodReturnTypeSymbols)
+    val (canBuildFrom, hasRec) = canBuildTree[A, Writes](c)(methodName = "write", reads = false, writes = true, typeToWrite = typeToWrite.typeSymbol, accessorSymbols = getterMethodSymbols)
 
+    // Manually-built "unapply"
     val objectTerm = newTermName("o")
     val objectIdent = Ident(objectTerm)
-
-    val unapplyTuple = getterMethodTerms.map { term => Select(objectIdent, term) }
-    val unapply = Function(
+    val unapplyExpressions = getterMethodTerms.map { term => Select(objectIdent, term) }
+    val unapplyWrapper = if (unapplyExpressions.size > 1)
+      Select(Ident(newTermName("scala")), newTermName(s"Tuple${getterMethodTerms.size}"))
+    else
+      Ident(newTermName("identity")) // If only 1 term, don't put in a tuple
+    val unapplyBody = Function(
       List(ValDef(Modifiers(PARAM), objectTerm, TypeTree(typeToWrite), EmptyTree)),
       Apply(
-        Ident(newTermName("Some")),
-        unapplyTuple.toList
+        unapplyWrapper,
+        unapplyExpressions.toList
       )
     )
 
@@ -78,7 +82,7 @@ object JsMacroImpl {
     val finalTree = Apply(
       Select(canBuildFrom, applier),
       List(
-        Apply(unliftIdent, List(unapply))
+        unapplyBody
       )
     )
 
