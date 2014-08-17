@@ -45,7 +45,7 @@ object JsMacroImpl {
   def writesImpl[A: c.WeakTypeTag](c: Context): c.Expr[Writes[A]] =
     macroImpl[A, Writes](c, "write", "contramap", reads = false, writes = true)
 
-  def writesWithGettersImpl[A: c.WeakTypeTag](c: Context): c.Expr[Writes[A]] = {
+  def writesGettersImpl[A: c.WeakTypeTag](c: Context): c.Expr[Writes[A]] = {
     import c.universe._
     import c.universe.Flag._
 

@@ -322,11 +322,11 @@ object JsonExtensionSpec extends Specification {
       }
 
       // The following shouldn't crash the compiler
-      implicit val user1Writes = writesWithGetters[User1]
-      implicit val catWrites = writesWithGetters[Cat]
-      implicit val recUserWrites = writesWithGetters[RecUser]
-      implicit val userWithFieldWrites = writesWithGetters[UserWithFields]
-      implicit val userMapFieldWrites = writesWithGetters[UserMap]
+      implicit val user1Writes = writesGetters[User1]
+      implicit val catWrites = writesGetters[Cat]
+      implicit val recUserWrites = writesGetters[RecUser]
+      implicit val userWithFieldWrites = writesGetters[UserWithFields]
+      implicit val userMapFieldWrites = writesGetters[UserMap]
 
       val userWithField = UserWithFields(age = 10, name = "Billy")
       val userMap = UserMap("toto", Map("tutu" -> UserMap("tutu")))

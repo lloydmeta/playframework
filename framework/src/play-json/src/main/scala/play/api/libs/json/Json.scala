@@ -246,7 +246,7 @@ object Json {
    *    def test(x: Int): Int = x + 999 // This should be ignored
    *   }
    *
-   *   implicit val userWithWrites = writesWithGetters[UserWithFields]
+   *   implicit val userWithWrites = writesGetters[UserWithFields]
    *   // macro-compiler replaces Json.writes[User] by injecting into compile chain
    *   // the exact code you would write yourself. This is strictly equivalent to:
    *   implicit val userWrites = (
@@ -257,6 +257,6 @@ object Json {
    *   )(unlift(o: UserWithFields => Some((o.age, o.name, o.ageWithName, o.ageWithNameVar)))
    * }}}
    */
-  def writesWithGetters[A] = macro JsMacroImpl.writesWithGettersImpl[A]
+  def writesGetters[A] = macro JsMacroImpl.writesGettersImpl[A]
 
 }
