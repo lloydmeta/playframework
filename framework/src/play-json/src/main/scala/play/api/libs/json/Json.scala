@@ -254,7 +254,7 @@ object Json {
    *    (__ \ 'name).write[String] and
    *    (__ \ 'ageWithName).write[String] and
    *    (__ \ 'ageWithNameVar).write[String]
-   *   )(unlift(o: UserWithFields => Some((o.age, o.name, o.ageWithName, o.ageWithNameVar)))
+   *   )(o: UserWithFields => (o.age, o.name, o.ageWithName, o.ageWithNameVar))
    * }}}
    */
   def writesGetters[A] = macro JsMacroImpl.writesGettersImpl[A]
