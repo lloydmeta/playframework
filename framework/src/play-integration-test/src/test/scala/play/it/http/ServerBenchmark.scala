@@ -3,7 +3,7 @@
  */
 package play.it.http
 
-import com.typesafe.netty.http.pipelining.{OrderedDownstreamChannelEvent, OrderedUpstreamMessageEvent}
+import com.typesafe.netty.http.pipelining.{ OrderedDownstreamChannelEvent, OrderedUpstreamMessageEvent }
 import java.io.File
 import java.net.{ InetSocketAddress, SocketAddress }
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
@@ -13,14 +13,16 @@ import org.databene.contiperf.report.CSVSummaryReportModule
 import org.jboss.netty.channel._
 import org.jboss.netty.handler.codec.http._
 import org.junit.runner.Description
-import org.junit.runners.model.{FrameworkMethod, Statement}
-import org.junit.{Rule, Test}
+import org.junit.runners.model.{ FrameworkMethod, Statement }
+import org.junit.{ Rule, Test }
 import org.junit.rules.TestRule
-import play.api.mvc.{Action, Controller, Handler, RequestHeader}
-import play.api.{Play, DefaultApplication, Mode}
+import play.api.inject.{ NewInstanceInjector, DefaultApplicationLifecycle }
+import play.api.mvc.{ Action, Controller, Handler, RequestHeader }
+import play.api._
 import play.core._
-import play.core.Router.{HandlerDef, Route, Routes}
-import play.core.{PathPattern, StaticPart}
+import play.core.Router.{ HandlerDef, Route, Routes }
+import play.core.{ PathPattern, StaticPart }
+import play.utils.Threads
 import scala.concurrent.duration._
 
 import scala.language.postfixOps
@@ -35,9 +37,14 @@ class ServerBenchmark extends NettyRunners {
   @Test
   @PerfTest(threads = 1, duration = 35000, warmUp = 30000)
   def makeHelloWordRequest() {
-    val application = new DefaultApplication(new File("."), this.getClass.getClassLoader, None, Mode.Test) {
-      override protected def loadRoutes: Option[Router.Routes] = Some(Routes)
+    val environment = Environment(new File("."), this.getClass.getClassLoader, Mode.Test)
+
+    val configuration = Threads.withContextClassLoader(environment.classLoader) {
+      Configuration.load(environment.rootPath, environment.mode)
     }
+
+    val application = new DefaultApplication(environment, new OptionalSourceMapper(None),
+      new DefaultApplicationLifecycle, NewInstanceInjector, configuration, DefaultGlobal, Routes, Plugins.empty)
 
     val remoteAddress = new InetSocketAddress(8080)
 
@@ -67,7 +74,6 @@ class ServerBenchmark extends NettyRunners {
     }
 
   }
-
 
   // JUnit rules
 
@@ -122,11 +128,12 @@ class ServerBenchmark extends NettyRunners {
       HandlerDef(this.getClass.getClassLoader, "", "hello_world", "index", Nil, "GET", """ Home page""", Routes.prefix + """""")
     )
 
-    def documentation = List(( """GET""", prefix, """hello_world""")).foldLeft(List.empty[(String, String, String)]) {
-      (s, e) => e.asInstanceOf[Any] match {
-        case r@(_, _, _) => s :+ r.asInstanceOf[(String, String, String)]
-        case l => s ++ l.asInstanceOf[List[(String, String, String)]]
-      }
+    def documentation = List(("""GET""", prefix, """hello_world""")).foldLeft(List.empty[(String, String, String)]) {
+      (s, e) =>
+        e.asInstanceOf[Any] match {
+          case r @ (_, _, _) => s :+ r.asInstanceOf[(String, String, String)]
+          case l => s ++ l.asInstanceOf[List[(String, String, String)]]
+        }
     }
 
     def routes: PartialFunction[RequestHeader, Handler] = {

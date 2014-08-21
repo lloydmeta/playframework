@@ -57,42 +57,42 @@ trait NettyRunners extends PlayRunners {
    * Test Netty handling against an application.
    */
   def withDownstreamHandler[T](
-      downstreamHandler: ChannelDownstreamHandler,
-      app: Application)(block: ChannelPipeline => T): T = {
+    downstreamHandler: ChannelDownstreamHandler,
+    app: Application)(block: ChannelPipeline => T): T = {
     running(app) {
       // Create a minimal Server needed by PlayDefaultUpstreamHandler
       val appProvider = new ApplicationProvider {
         def get = Success(app)
-            def path = app.path
+        def path = app.path
       }
       val server = new Server {
         def mode: Mode.Mode = Mode.Test
-            def applicationProvider: ApplicationProvider = appProvider
+        def applicationProvider: ApplicationProvider = appProvider
       }
       // Create a PlayDefaultUpstreamHandler and an interface to interact with it
       val duh = new PlayDefaultUpstreamHandler(server, new DefaultChannelGroup())
       val pipeline = Channels.pipeline()
       pipeline.addFirst("play-upstream-handler", duh)
       pipeline.addFirst("test-downstream-handler", downstreamHandler)
-      try block(pipeline) finally Play.stop()
+      try block(pipeline) finally Play.stop(app)
     }
   }
-  
+
   /**
    * Test Netty handling against an EssentialAction.
    */
   def withDownstreamHandler[T](
-      downstreamHandler: ChannelDownstreamHandler,
-      action: EssentialAction)(block: ChannelPipeline => T): T = {
+    downstreamHandler: ChannelDownstreamHandler,
+    action: EssentialAction)(block: ChannelPipeline => T): T = {
     val app = new FakeApplication() {
-      override lazy val routes = Some(new Routes {
+      override lazy val routes = new Routes {
         def prefix = "/"
         def setPrefix(prefix: String) {}
         def documentation = Nil
         def routes = {
           case _ => action
         }
-      })
+      }
     }
     withDownstreamHandler(downstreamHandler, app)(block)
   }

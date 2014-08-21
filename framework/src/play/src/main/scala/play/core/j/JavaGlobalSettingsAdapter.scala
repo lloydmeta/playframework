@@ -15,15 +15,15 @@ class JavaGlobalSettingsAdapter(val underlying: play.GlobalSettings) extends Glo
   require(underlying != null, "underlying cannot be null")
 
   override def beforeStart(app: Application) {
-    underlying.beforeStart(new play.Application(app))
+    underlying.beforeStart(app.injector.instanceOf[play.Application])
   }
 
   override def onStart(app: Application) {
-    underlying.onStart(new play.Application(app))
+    underlying.onStart(app.injector.instanceOf[play.Application])
   }
 
   override def onStop(app: Application) {
-    underlying.onStop(new play.Application(app))
+    underlying.onStop(app.injector.instanceOf[play.Application])
   }
 
   override def onRouteRequest(request: RequestHeader): Option[Handler] = {
@@ -44,11 +44,6 @@ class JavaGlobalSettingsAdapter(val underlying: play.GlobalSettings) extends Glo
   override def onBadRequest(request: RequestHeader, error: String): Future[Result] = {
     JavaHelpers.invokeWithContext(request, req => Option(underlying.onBadRequest(req, error)))
       .getOrElse(super.onBadRequest(request, error))
-  }
-
-  override def getControllerInstance[A](controllerClass: Class[A]): A = {
-    Option(underlying.getControllerInstance(controllerClass))
-      .getOrElse(super.getControllerInstance(controllerClass))
   }
 
   override def onLoadConfig(config: Configuration, path: File, classloader: ClassLoader, mode: Mode.Mode) = {

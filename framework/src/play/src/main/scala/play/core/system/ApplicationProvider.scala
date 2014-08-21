@@ -4,6 +4,8 @@
 package play.core
 
 import java.io._
+import play.utils.Threads
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{ Try, Success, Failure }
@@ -27,10 +29,6 @@ trait SourceMapper {
 
 }
 
-trait DevSettings {
-  def devSettings: Map[String, String]
-}
-
 /**
  * Provides information about a Play Application running inside a Play server.
  */
@@ -50,7 +48,10 @@ trait HandleWebCommandSupport {
  */
 class StaticApplication(applicationPath: File) extends ApplicationProvider {
 
-  val application = new DefaultApplication(applicationPath, this.getClass.getClassLoader, None, Mode.Prod)
+  val environment = Environment(applicationPath, this.getClass.getClassLoader, Mode.Prod)
+  val context = ApplicationLoader.createContext(environment)
+  val loader = ApplicationLoader(context)
+  val application = loader.load(context)
 
   Play.start(application)
 
@@ -96,9 +97,7 @@ class ReloadableApplication(buildLink: BuildLink, buildDocHandler: BuildDocHandl
   // This is usually done by Application itself when it's instantiated, which for other types of ApplicationProviders,
   // is usually instantiated along with or before the provider.  But in dev mode, no application exists initially, so
   // configure it here.
-  Logger.configure(
-    Map("application.home" -> path.getAbsolutePath),
-    mode = Mode.Dev)
+  Logger.init(path, Mode.Dev)
 
   lazy val path = buildLink.projectPath
 
@@ -106,6 +105,7 @@ class ReloadableApplication(buildLink: BuildLink, buildDocHandler: BuildDocHandl
   println()
 
   var lastState: Try[Application] = Failure(new PlayException("Not initialized", "?"))
+  var currentWebCommands: Option[WebCommands] = None
 
   def get = {
 
@@ -139,9 +139,13 @@ class ReloadableApplication(buildLink: BuildLink, buildDocHandler: BuildDocHandl
               val reloadable = this
 
               // First, stop the old application if it exists
-              Play.stop()
+              lastState.foreach(Play.stop)
 
-              val newApplication = new DefaultApplication(reloadable.path, projectClassloader, Some(new SourceMapper {
+              import scala.collection.JavaConverters._
+
+              // Create the new environment
+              val environment = Environment(path, projectClassloader, Mode.Dev)
+              val sourceMapper = new SourceMapper {
                 def sourceOf(className: String, line: Option[Int]) = {
                   Option(buildLink.findSource(className, line.map(_.asInstanceOf[java.lang.Integer]).orNull)).flatMap {
                     case Array(file: java.io.File, null) => Some((file, None))
@@ -149,9 +153,15 @@ class ReloadableApplication(buildLink: BuildLink, buildDocHandler: BuildDocHandl
                     case _ => None
                   }
                 }
-              }), Mode.Dev) with DevSettings {
-                import scala.collection.JavaConverters._
-                lazy val devSettings: Map[String, String] = buildLink.settings.asScala.toMap
+              }
+
+              val webCommands = new DefaultWebCommands
+              currentWebCommands = Some(webCommands)
+
+              val newApplication = Threads.withContextClassLoader(projectClassloader) {
+                val context = ApplicationLoader.createContext(environment, buildLink.settings.asScala.toMap, Some(sourceMapper), webCommands)
+                val loader = ApplicationLoader(context)
+                loader.load(context)
               }
 
               Play.start(newApplication)
@@ -185,17 +195,9 @@ class ReloadableApplication(buildLink: BuildLink, buildDocHandler: BuildDocHandl
   }
 
   override def handleWebCommand(request: play.api.mvc.RequestHeader): Option[Result] = {
-
     buildDocHandler.maybeHandleDocRequest(request).asInstanceOf[Option[Result]].orElse(
-      for {
-        app <- Play.maybeApplication
-        result <- app.plugins.foldLeft(Option.empty[Result]) {
-          case (None, plugin: HandleWebCommandSupport) => plugin.handleWebCommand(request, buildLink, path)
-          case (result, _) => result
-        }
-      } yield result
+      currentWebCommands.flatMap(_.handleWebCommand(request, buildLink, path))
     )
 
   }
 }
-

@@ -3,7 +3,10 @@
  */
 package play.libs;
 
+import scala.runtime.AbstractFunction0;
+
 import java.util.*;
+import java.util.concurrent.Callable;
 
 /**
  * Class that contains useful java &lt;-&gt; scala conversion helpers.
@@ -44,7 +47,27 @@ public class Scala {
         return play.utils.Conversions.newMap(
                 scala.collection.JavaConverters.mapAsScalaMapConverter(javaMap).asScala().toSeq()
                 );
-    } 
+    }
+
+    /**
+     * Converts a Java Callable to a Scala Function0.
+     */
+    public static <A> scala.Function0<A> asScala(final Callable<A> callable) {
+        return new AbstractFunction0<A>() {
+            @Override
+            public A apply() {
+                try {
+                    return callable.call();
+                } catch (RuntimeException e) {
+                    throw e;
+                } catch (Error e) {
+                    throw e;
+                } catch (Throwable t) {
+                    throw new RuntimeException(t);
+                }
+            }
+        };
+    }
 
     /**
      * Converts a Scala List to Java.
@@ -76,14 +99,14 @@ public class Scala {
 
     /**
      * Wrap a value into a Scala Option.
-     */ 
+     */
     public static <T> scala.Option<T> Option(T t) {
         return scala.Option.apply(t);
     }
 
     /**
      * None
-     */ 
+     */
     public static <T> scala.Option<T> None() {
         return scala.Option.apply(null);
     }
@@ -96,19 +119,33 @@ public class Scala {
         return new scala.Tuple2<A, B>(a, b);
     }
 
-    /** 
+    /**
+     *  Convert a scala Tuple2 to a java F.Tuple.
+     */
+    public static <A, B> F.Tuple<A, B> asJava(scala.Tuple2<A, B> tuple) {
+        return F.Tuple(tuple._1(), tuple._2());
+    }
+
+    /**
      * Creates an empty Scala Seq.
-     */ 
+     */
     @SuppressWarnings("unchecked")
     public static <T> scala.collection.Seq<T> emptySeq() {
         return (scala.collection.Seq<T>)toSeq(new Object[] {});
     }
 
-    /** 
+    /**
      * Creates an empty Scala Map.
      */
     public static <A,B> scala.collection.immutable.Map<A,B> emptyMap() {
         return new scala.collection.immutable.HashMap<A,B>();
+    }
+
+    /**
+     * Returns an any ClassTag typed according to the Java compiler as C.
+     */
+    public static <C> scala.reflect.ClassTag<C> classTag() {
+        return (scala.reflect.ClassTag<C>) scala.reflect.ClassTag$.MODULE$.Any();
     }
 
 }

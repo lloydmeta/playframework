@@ -20,7 +20,7 @@ object JavaWSSpec extends Specification with Results with Status {
   // It's much easier to test this in Scala because we need to set up a
   // fake application with routes.
 
-  val fakeApplication = FakeApplication(withRoutes = {
+  def fakeApplication = FakeApplication(withRoutes = {
     case ("GET", "/feed") =>
       Action {
         val obj: JsObject = Json.obj(
@@ -44,13 +44,13 @@ object JavaWSSpec extends Specification with Results with Status {
 
   "The Java WS class" should {
     "call WS correctly" in new WithServer(app = fakeApplication, port = 3333) {
-      val result = MockJavaAction.call(new JavaWS.Controller1(), fakeRequest())
+      val result = MockJavaAction.call(app.injector.instanceOf[JavaWS.Controller1], fakeRequest())
 
       status(result) must equalTo(OK)
     }
 
     "compose WS calls successfully" in new WithServer(app = fakeApplication, port = 3333) {
-      val result = MockJavaAction.call(new JavaWS.Controller2(), fakeRequest())
+      val result = MockJavaAction.call(app.injector.instanceOf[JavaWS.Controller2], fakeRequest())
 
       status(result) must equalTo(OK)
       contentAsString(result) must beEqualTo("Number of comments: 10")

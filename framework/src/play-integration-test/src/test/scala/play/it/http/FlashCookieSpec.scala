@@ -2,16 +2,16 @@ package play.it.http
 
 import play.api.test._
 import play.api.test.Helpers._
-import play.api.mvc.{Flash, Action}
+import play.api.mvc.{ Flash, Action }
 import play.api.mvc.Results._
-import play.api.libs.ws.{Cookie, Response, WS}
+import play.api.libs.ws.{ Cookie, Response, WS }
 import play.api.Logger
 
 object FlashCookieSpec extends PlaySpecification {
 
   sequential
 
-  val appWithRedirect = FakeApplication(withRoutes = {
+  def appWithRedirect = FakeApplication(withRoutes = {
     case ("GET", "/flash") =>
       Action {
         Redirect("/landing").flashing(
@@ -52,6 +52,5 @@ object FlashCookieSpec extends PlaySpecification {
       }
     }
   }
-
 
 }

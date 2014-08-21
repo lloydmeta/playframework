@@ -7,6 +7,8 @@ import play.utils.Threads
 
 import java.io._
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 import javax.xml.parsers.SAXParserFactory
 import org.apache.xerces.impl.Constants
@@ -75,12 +77,12 @@ object Play {
   /**
    * Starts this application.
    *
-   * @param the application to start
+   * @param app the application to start
    */
   def start(app: Application) {
 
     // First stop previous app if exists
-    stop()
+    stop(_currentApp)
 
     _currentApp = app
 
@@ -99,14 +101,15 @@ object Play {
   }
 
   /**
-   * Stops the current application.
+   * Stops the given application.
    */
-  def stop() {
-    Option(_currentApp).map { app =>
+  def stop(app: Application) {
+    if (app != null) {
       Threads.withContextClassLoader(classloader(app)) {
         app.plugins.reverse.foreach { p =>
           try { p.onStop() } catch { case NonFatal(e) => logger.warn("Error stopping plugin", e) }
         }
+        try { Await.ready(app.stop(), Duration.Inf) } catch { case NonFatal(e) => logger.warn("Error stopping application", e) }
       }
     }
     _currentApp = null
@@ -190,7 +193,7 @@ object Play {
   /**
    * Returns the current application router.
    */
-  def routes(implicit app: Application): Option[play.core.Router.Routes] = app.routes
+  def routes(implicit app: Application): play.core.Router.Routes = app.routes
 
   /**
    * Returns the current application global settings.
@@ -220,5 +223,12 @@ object Play {
   /**
    * Returns the name of the cookie that can be used to permanently set the user's language.
    */
-  def langCookieName(implicit app: Application): String = app.configuration.getString("application.lang.cookie").getOrElse("PLAY_LANG")
+  def langCookieName(implicit app: Application): String = {
+    app.configuration.getString("play.modules.i18n.langCookieName").orElse {
+      app.configuration.getString("application.lang.cookie").map { name =>
+        Logger.warn("application.lang.cookie is deprecated, use play.modules.i18n.langCookieName instead")
+        name
+      }
+    }.getOrElse("PLAY_LANG")
+  }
 }

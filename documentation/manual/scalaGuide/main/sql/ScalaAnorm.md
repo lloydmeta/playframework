@@ -747,6 +747,42 @@ SQL("Select name,image from Country")().map {
 }
 ```
 
+For types where column support is provided by Anorm, convenient functions are available to ease writing custom parsers. Each of these functions parses column either by name or index (> 1).
+
+```scala
+import anorm.SqlParser.str // String function
+
+str("column")
+str(1/* columnIndex)
+```
+
+Type                    | Function
+------------------------|--------------
+Array[Byte]             | byteArray
+Boolean                 | bool
+Byte                    | byte
+Date                    | date
+Double                  | double
+Float                   | float
+InputStream<sup>1</sup> | binaryStream
+Int                     | int
+Long                    | long
+Short                   | short
+String                  | str
+
+- 1. Type `java.io.InputStream`.
+
+Temporal types from [Joda](http://www.joda.org) are also supported:
+
+↓JDBC / JVM➞ | DateTime<sup>1</sup> | Instant<sup>2</sup>
+------------ | -------------------- | -------------------
+Date         | Yes                  | Yes
+Long         | Yes                  | Yes
+Timestamp    | Yes                  | Yes
+
+- 1. Type `org.joda.time.DateTime`.
+- 2. Type `org.joda.time.Instant`.
+
 It's possible to add custom mapping, for example if underlying DB doesn't support boolean datatype and returns integer instead. To do so, you have to provide a new implicit conversion for `Column[T]`, where `T` is the target Scala type:
 
 ```scala
@@ -806,6 +842,16 @@ Vector                    | Multi-value, with `T` mapping for each element      
 - 13. Types `Short` and `java.lang.Short`.
 - 14. Type `scala.collection.immutable.SortedSet`.
 - 15. Not-null value extracted using `.toString`.
+
+[Joda](http://www.joda.org) temporal types are supported as parameters:
+
+JVM                  | JDBC
+---------------------|-----------
+DateTime<sup>1</sup> | Timestamp
+Instant<sup>2</sup>  | Timstamp
+
+- 1. Type `org.joda.time.DateTime`.
+- 2. Type `org.joda.time.Instant`.
 
 Custom or specific DB conversion for parameter can also be provided:
 

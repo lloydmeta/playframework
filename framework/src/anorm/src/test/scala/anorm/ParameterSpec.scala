@@ -14,7 +14,6 @@ import java.util.Date
 import java.sql.{ SQLFeatureNotSupportedException, Timestamp }
 
 import scala.collection.immutable.SortedSet
-import org.joda.time.{ DateTime, Instant }
 
 import acolyte.jdbc.{
   DefinedParameter => DParam,
@@ -24,7 +23,9 @@ import acolyte.jdbc.{
 import acolyte.jdbc.AcolyteDSL.{ connection, handleStatement }
 import acolyte.jdbc.Implicits._
 
-object ParameterSpec extends org.specs2.mutable.Specification {
+object ParameterSpec
+    extends org.specs2.mutable.Specification with JodaParameterSpec {
+
   "Parameter" title
 
   val jbi1 = new BigInteger("1234"); val Jbi1bd = new JBigDec("1234")
@@ -33,8 +34,6 @@ object ParameterSpec extends org.specs2.mutable.Specification {
   val sbi1 = BigInt(jbi1)
   val Date1 = new Date()
   val Timestamp1 = { val ts = new Timestamp(123l); ts.setNanos(123456789); ts }
-  val dateTime1 = DateTime.now()
-  val instant1 = Instant.now()
   val uuid1 = java.util.UUID.randomUUID; val Uuid1str = uuid1.toString
   val SqlStr = ParameterMetaData.Str
   val SqlBool = ParameterMetaData.Bool
@@ -128,9 +127,9 @@ object ParameterSpec extends org.specs2.mutable.Specification {
       DParam(Jbd1, SqlDec1) :: Nil) => 1 /* case ok */
     case UpdateExecution("set-some-sbd ?",
       DParam(Jbd1, SqlDec1) :: Nil) => 1 /* case ok */
-    case UpdateExecution("set-none ?", DParam(null, _) :: Nil)      => 1 /* ok */
+    case UpdateExecution("set-none ?", DParam(null, _) :: Nil) => 1 /* ok */
     case UpdateExecution("set-empty-opt ?", DParam(null, _) :: Nil) => 1 /*ok*/
-    case UpdateExecution("no-param-placeholder", Nil)               => 1 /* ok */
+    case UpdateExecution("no-param-placeholder", Nil) => 1 /* ok */
     case UpdateExecution("no-snd-placeholder ?",
       DParam("first", SqlStr) :: Nil) => 1 /* ok */
     case UpdateExecution("set-old ?", DParam(2l, SqlLong) :: Nil) => 1 // ok
@@ -364,24 +363,6 @@ object ParameterSpec extends org.specs2.mutable.Specification {
         on("p" -> null.asInstanceOf[Timestamp]).execute() must beFalse
     }
 
-    "be joda-time datetime" in withConnection() { implicit c =>
-      SQL("set-date {p}").on("p" -> dateTime1).execute() must beFalse
-    }
-
-    "be null joda-time datetime" in withConnection() { implicit c =>
-      SQL("set-null-date {p}").
-        on("p" -> null.asInstanceOf[DateTime]).execute() must beFalse
-    }
-
-    "be joda-time instant" in withConnection() { implicit c =>
-      SQL("set-date {p}").on("p" -> instant1).execute() must beFalse
-    }
-
-    "be null joda-time instant" in withConnection() { implicit c =>
-      SQL("set-null-date {p}").
-        on("p" -> null.asInstanceOf[Instant]).execute() must beFalse
-    }
-
     "be UUID" in withConnection() { implicit c =>
       SQL("set-uuid {p}").on("p" -> uuid1).execute() must beFalse
     }
@@ -457,7 +438,7 @@ object ParameterSpec extends org.specs2.mutable.Specification {
             aka("parameter conversion") must throwA[IllegalArgumentException]).
             and(SQL("set-null-str-opt {p}").
               on("p" -> null.asInstanceOf[Option[String]]).
-                aka("conversion") must throwA[IllegalArgumentException])
+              aka("conversion") must throwA[IllegalArgumentException])
       }
 
     "be defined Java big decimal option" in withConnection() { implicit c =>

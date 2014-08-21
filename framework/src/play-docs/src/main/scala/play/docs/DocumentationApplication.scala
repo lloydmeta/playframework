@@ -4,6 +4,7 @@
 package play.docs
 
 import java.io.File
+import play.api.inject.{ NewInstanceInjector, DefaultApplicationLifecycle }
 import java.util.concurrent.Callable
 import play.api.mvc._
 import play.api._
@@ -17,15 +18,11 @@ case class DocumentationApplication(projectPath: File, buildDocHandler: BuildDoc
     translationReport: Callable[File],
     forceTranslationReport: Callable[File]) extends ApplicationProvider {
 
-  val application = new Application with WithDefaultConfiguration {
-    def path = projectPath
-    def classloader = this.getClass.getClassLoader
-    def sources = None
-    def mode = Mode.Dev
-    def global = new GlobalSettings() {}
-    def plugins = Nil
-    override lazy val routes = None
-  }
+  private val environment = Environment(projectPath, this.getClass.getClassLoader, Mode.Dev)
+  private val configuration = Configuration.load(environment.rootPath, environment.mode, Map.empty)
+  val application = new DefaultApplication(environment, new OptionalSourceMapper(None),
+    new DefaultApplicationLifecycle(), NewInstanceInjector, configuration, DefaultGlobal, Router.Null, Plugins.empty
+  )
 
   Play.start(application)
 

@@ -44,7 +44,8 @@ object Dependencies {
   )
 
   val jpaDeps = Seq(
-    "org.hibernate.javax.persistence" % "hibernate-jpa-2.0-api" % "1.0.1.Final"
+    "org.hibernate.javax.persistence" % "hibernate-jpa-2.0-api" % "1.0.1.Final",
+    "org.hibernate" % "hibernate-entitymanager" % "3.6.9.Final" % "test"
   )
 
   val link = Seq(
@@ -109,6 +110,12 @@ object Dependencies {
       "xerces" % "xercesImpl" % "2.11.0",
 
       "javax.transaction" % "jta" % "1.1",
+
+      // Since we don't use any of the AOP features of guice, we exclude cglib.
+      // This solves issues later where cglib depends on an older version of asm,
+      // and other libraries (pegdown) depend on a newer version with a different groupId,
+      // and this causes binary issues.
+      "com.google.inject" % "guice" % "3.0" exclude("org.sonatype.sisu.inject", "cglib"),
 
       guava % Test,
 
@@ -219,7 +226,6 @@ object Dependencies {
     h2database % Test,
     "org.eu.acolyte" %% "jdbc-scala" % acolyteVersion % Test,
     "joda-time" % "joda-time" % "2.3",
-    "org.joda" % "joda-convert" % "1.6",
     "com.chuusai" % "shapeless" % "2.0.0" % Test cross CrossVersion.binaryMapped {
       case "2.10" => BuildSettings.buildScalaVersion
       case x => x

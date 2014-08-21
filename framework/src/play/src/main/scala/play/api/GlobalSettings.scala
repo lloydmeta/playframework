@@ -3,8 +3,13 @@
  */
 package play.api
 
+import javax.inject.{ Inject, Singleton }
+
 import play.api.mvc._
 import java.io.File
+import play.core.j
+import play.utils.Threads
+
 import scala.util.control.NonFatal
 import scala.concurrent.Future
 import play.api.http.HttpVerbs
@@ -123,10 +128,7 @@ trait GlobalSettings {
    * @return an action to handle this request - if no action is returned, a 404 not found result will be sent to client
    * @see onHandlerNotFound
    */
-  def onRouteRequest(request: RequestHeader): Option[Handler] = Play.maybeApplication.flatMap(_.routes.flatMap {
-    router =>
-      router.handlerFor(request)
-  })
+  def onRouteRequest(request: RequestHeader): Option[Handler] = Play.maybeApplication.flatMap(_.routes.handlerFor(request))
 
   /**
    * Called when an exception occurred.
@@ -170,7 +172,7 @@ trait GlobalSettings {
     Future.successful(NotFound(Play.maybeApplication.map {
       case app if app.mode != Mode.Prod => views.html.defaultpages.devNotFound.f
       case app => views.html.defaultpages.notFound.f
-    }.getOrElse(views.html.defaultpages.devNotFound.f)(request, Play.maybeApplication.flatMap(_.routes))))
+    }.getOrElse(views.html.defaultpages.devNotFound.f)(request, Play.maybeApplication.map(_.routes))))
   }
 
   /**
@@ -188,16 +190,6 @@ trait GlobalSettings {
   def onRequestCompletion(request: RequestHeader) {
   }
 
-  /**
-   * Manages controllers instantiation.
-   *
-   * @param controllerClass the controller class to instantiate.
-   * @return the appropriate instance for the given controller class.
-   */
-  def getControllerInstance[A](controllerClass: Class[A]): A = {
-    controllerClass.newInstance();
-  }
-
 }
 
 /**
@@ -205,10 +197,55 @@ trait GlobalSettings {
  */
 object DefaultGlobal extends GlobalSettings
 
+object GlobalSettings {
+
+  /**
+   * Load the global object.
+   *
+   * @param configuration The configuration to read the loading from.
+   * @param environment The environment to load the global object from.
+   * @return
+   */
+  def apply(configuration: Configuration, environment: Environment): GlobalSettings = {
+    val globalClass = configuration.getString("application.global").getOrElse("Global")
+
+    def javaGlobal: Option[play.GlobalSettings] = try {
+      Option(environment.classLoader.loadClass(globalClass).newInstance().asInstanceOf[play.GlobalSettings])
+    } catch {
+      case e: InstantiationException => None
+      case e: ClassNotFoundException => None
+    }
+
+    def scalaGlobal: GlobalSettings = try {
+      environment.classLoader.loadClass(globalClass + "$").getDeclaredField("MODULE$").get(null).asInstanceOf[GlobalSettings]
+    } catch {
+      case e: ClassNotFoundException if !configuration.getString("application.global").isDefined => DefaultGlobal
+      case e if configuration.getString("application.global").isDefined => {
+        throw configuration.reportError("application.global",
+          s"Cannot initialize the custom Global object ($globalClass) (perhaps it's a wrong reference?)", Some(e))
+      }
+    }
+
+    try {
+      javaGlobal.map(new j.JavaGlobalSettingsAdapter(_)).getOrElse(scalaGlobal)
+    } catch {
+      case e: PlayException => throw e
+      case e: ThreadDeath => throw e
+      case e: VirtualMachineError => throw e
+      case e: Throwable => throw new PlayException(
+        "Cannot init the Global object",
+        e.getMessage,
+        e
+      )
+    }
+  }
+}
+
 /**
  * The Global plugin executes application's `globalSettings` `onStart` and `onStop`.
  */
-class GlobalPlugin(app: Application) extends Plugin {
+@Singleton
+class GlobalPlugin @Inject() (app: Application) extends Plugin {
 
   // Call before start now
   app.global.beforeStart(app)

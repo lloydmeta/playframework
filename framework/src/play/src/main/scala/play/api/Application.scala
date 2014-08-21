@@ -3,6 +3,10 @@
  */
 package play.api
 
+import javax.inject.Inject
+
+import com.google.inject.Singleton
+import play.api.inject.{ NewInstanceInjector, Injector, DefaultApplicationLifecycle }
 import play.core._
 import play.utils._
 
@@ -12,158 +16,9 @@ import java.io._
 
 import annotation.implicitNotFound
 
-import java.lang.reflect.InvocationTargetException
 import reflect.ClassTag
 import scala.util.control.NonFatal
 import scala.concurrent.{ Future, ExecutionException }
-
-trait WithDefaultGlobal {
-  self: Application with WithDefaultConfiguration =>
-
-  // -- Global stuff
-
-  private lazy val globalClass = initialConfiguration.getString("application.global").getOrElse("Global")
-
-  lazy private val javaGlobal: Option[play.GlobalSettings] = try {
-    Option(self.classloader.loadClass(globalClass).newInstance().asInstanceOf[play.GlobalSettings])
-  } catch {
-    case e: InstantiationException => None
-    case e: ClassNotFoundException => None
-  }
-
-  lazy private val scalaGlobal: GlobalSettings = try {
-    self.classloader.loadClass(globalClass + "$").getDeclaredField("MODULE$").get(null).asInstanceOf[GlobalSettings]
-  } catch {
-    case e: ClassNotFoundException if !initialConfiguration.getString("application.global").isDefined => DefaultGlobal
-    case e if initialConfiguration.getString("application.global").isDefined => {
-      throw initialConfiguration.reportError("application.global",
-        s"Cannot initialize the custom Global object ($globalClass) (perhaps it's a wrong reference?)", Some(e))
-    }
-  }
-
-  /**
-   * The global settings object used by this application.
-   *
-   * @see play.api.GlobalSettings
-   */
-  private lazy val globalInstance: GlobalSettings = Threads.withContextClassLoader(self.classloader) {
-    try {
-      javaGlobal.map(new j.JavaGlobalSettingsAdapter(_)).getOrElse(scalaGlobal)
-    } catch {
-      case e: PlayException => throw e
-      case e: ThreadDeath => throw e
-      case e: VirtualMachineError => throw e
-      case e: Throwable => throw new PlayException(
-        "Cannot init the Global object",
-        e.getMessage,
-        e
-      )
-    }
-  }
-
-  def global: GlobalSettings = {
-    globalInstance
-  }
-}
-
-trait WithDefaultConfiguration {
-  self: Application =>
-
-  protected lazy val initialConfiguration = Threads.withContextClassLoader(self.classloader) {
-    Configuration.load(path, mode, this match {
-      case dev: DevSettings => dev.devSettings
-      case _ => Map.empty
-    })
-  }
-
-  private lazy val fullConfiguration = global.onLoadConfig(initialConfiguration, path, classloader, mode)
-
-  def configuration: Configuration = fullConfiguration
-
-}
-
-trait WithDefaultPlugins {
-  self: Application =>
-
-  private[api] def pluginClasses: Seq[String] = {
-
-    import scala.collection.JavaConverters._
-
-    val PluginDeclaration = """([0-9_]+):(.*)""".r
-
-    val pluginFiles = self.classloader.getResources("play.plugins").asScala.toList ++ self.classloader.getResources("conf/play.plugins").asScala.toList
-
-    pluginFiles.distinct.map { plugins =>
-      PlayIO.readUrlAsString(plugins).split("\n").map(_.replaceAll("#.*$", "").trim).filterNot(_.isEmpty).map {
-        case PluginDeclaration(priority, className) => (priority.toInt, className)
-      }
-    }.flatten.sortBy(_._1).map(_._2)
-
-  }
-
-  /**
-   * The plugins list used by this application.
-   *
-   * Plugin classes must extend play.api.Plugin and are automatically discovered
-   * by searching for all play.plugins files in the classpath.
-   *
-   * A play.plugins file contains a list of plugin classes to be loaded, and sorted by priority:
-   *
-   * {{{
-   * 100:play.api.i18n.MessagesPlugin
-   * 200:play.api.db.DBPlugin
-   * 250:play.api.cache.BasicCachePlugin
-   * 300:play.db.ebean.EbeanPlugin
-   * 400:play.db.jpa.JPAPlugin
-   * 500:play.api.db.evolutions.EvolutionsPlugin
-   * 1000:play.api.libs.akka.AkkaPlugin
-   * 10000:play.api.GlobalPlugin
-   * }}}
-   *
-   * @see play.api.Plugin
-   */
-  lazy val plugins: Seq[Plugin] = Threads.withContextClassLoader(classloader) {
-
-    pluginClasses.map { className =>
-      try {
-        val plugin = classloader.loadClass(className).getConstructor(classOf[Application]).newInstance(this).asInstanceOf[Plugin]
-        if (plugin.enabled) Some(plugin) else { Play.logger.debug("Plugin [" + className + "] is disabled"); None }
-      } catch {
-        case e: java.lang.NoSuchMethodException => {
-          try {
-            val plugin = classloader.loadClass(className).getConstructor(classOf[play.Application]).newInstance(new play.Application(this)).asInstanceOf[Plugin]
-            if (plugin.enabled) Some(plugin) else { Play.logger.warn("Plugin [" + className + "] is disabled"); None }
-          } catch {
-            case e: java.lang.NoSuchMethodException =>
-              throw new PlayException("Cannot load plugin",
-                "Could not find an appropriate constructor to instantiate plugin [" + className +
-                  "]. All Play plugins must define a constructor that accepts a single argument either of type " +
-                  "play.Application for Java plugins or play.api.Application for Scala plugins.")
-            case e: PlayException => throw e
-            case e: VirtualMachineError => throw e
-            case e: ThreadDeath => throw e
-            case e: Throwable => throw new PlayException(
-              "Cannot load plugin",
-              "Plugin [" + className + "] cannot be instantiated.",
-              e)
-          }
-        }
-        case e: InvocationTargetException => throw new PlayException(
-          "Cannot load plugin",
-          "An exception occurred during Plugin [" + className + "] initialization",
-          e.getTargetException)
-        case e: PlayException => throw e
-        case e: ThreadDeath => throw e
-        case e: VirtualMachineError => throw e
-        case e: Throwable => throw new PlayException(
-          "Cannot load plugin",
-          "Plugin [" + className + "] cannot be instantiated.",
-          e)
-      }
-    }.flatten
-
-  }
-}
 
 /**
  * A Play application.
@@ -237,47 +92,9 @@ trait Application {
   def plugin[T](implicit ct: ClassTag[T]): Option[T] = plugin(ct.runtimeClass).asInstanceOf[Option[T]]
 
   /**
-   * The router used by this application (if defined).
+   * The router used by this application.
    */
-  lazy val routes: Option[Router.Routes] = loadRoutes
-
-  protected def loadRoutes: Option[Router.Routes] = try {
-    Some(classloader.loadClass(configuration.getString("application.router").map(_ + "$").getOrElse("Routes$")).getDeclaredField("MODULE$").get(null).asInstanceOf[Router.Routes]).map { router =>
-      router.setPrefix(configuration.getString("application.context").map { prefix =>
-        if (!prefix.startsWith("/")) {
-          throw configuration.reportError("application.context", "Invalid application context")
-        }
-        prefix
-      }.getOrElse("/"))
-      router
-    }
-  } catch {
-    case e: ClassNotFoundException => configuration.getString("application.router").map { routerName =>
-      throw configuration.reportError("application.router", "Router not found: " + routerName)
-    }
-  }
-
-  // Reconfigure logger
-  {
-
-    val validValues = Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF", "INHERITED")
-    val setLevel = (level: String) => level match {
-      case "INHERITED" => null
-      case level => ch.qos.logback.classic.Level.toLevel(level)
-    }
-
-    Logger.configure(
-      Map("application.home" -> path.getAbsolutePath),
-      configuration.getConfig("logger").map { loggerConfig =>
-        loggerConfig.keys.map {
-          case "resource" | "file" | "url" => "" -> null
-          case key @ "root" => "ROOT" -> loggerConfig.getString(key, Some(validValues)).map(setLevel).get
-          case key => key -> loggerConfig.getString(key, Some(validValues)).map(setLevel).get
-        }.toMap
-      }.getOrElse(Map.empty),
-      mode)
-
-  }
+  def routes: Router.Routes
 
   /**
    * Handle a runtime error during the execution of an action
@@ -394,10 +211,56 @@ trait Application {
     }.get))
   }
 
+  /**
+   * Stop the application.  The returned future will be redeemed when all stop hooks have been run.
+   */
+  def stop(): Future[Unit]
+
+  /**
+   * Get the injector for this application.
+   *
+   * @return The injector.
+   */
+  def injector: Injector = NewInstanceInjector
 }
 
-class DefaultApplication(
-  override val path: File,
-  override val classloader: ClassLoader,
-  override val sources: Option[SourceMapper],
-  override val mode: Mode.Mode) extends Application with WithDefaultConfiguration with WithDefaultGlobal with WithDefaultPlugins
+class OptionalSourceMapper(val sourceMapper: Option[SourceMapper])
+
+@Singleton
+class DefaultApplication @Inject() (environment: Environment,
+    sourceMapper: OptionalSourceMapper,
+    applicationLifecycle: DefaultApplicationLifecycle,
+    override val injector: Injector,
+    override val configuration: Configuration,
+    override val global: GlobalSettings,
+    override val routes: Router.Routes,
+    override val plugins: Plugins) extends Application {
+
+  def path = environment.rootPath
+
+  def classloader = environment.classLoader
+
+  def mode = environment.mode
+
+  def sources = sourceMapper.sourceMapper
+
+  def stop() = applicationLifecycle.stop()
+}
+
+/**
+ * Helper to provide the Play built in components.
+ */
+trait BuiltInComponents {
+  def environment: Environment
+  def sourceMapper: OptionalSourceMapper
+  def webCommands: WebCommands
+  def configuration: Configuration
+  def global: GlobalSettings
+
+  def routes: Router.Routes
+
+  lazy val applicationLifecycle: DefaultApplicationLifecycle = new DefaultApplicationLifecycle
+  lazy val injector: Injector = NewInstanceInjector
+  lazy val application: Application = new DefaultApplication(environment, sourceMapper, applicationLifecycle, injector,
+    configuration, global, routes, Plugins.empty)
+}

@@ -32,11 +32,11 @@ object ServerStartSpec extends Specification {
 
   case class ExitException(message: String, cause: Option[Throwable] = None, returnCode: Int = -1) extends Exception(s"Exit with $message, $cause, $returnCode", cause.orNull)
 
-  def startResult[A](f: => A): Either[String,A] = try Right(f) catch {
+  def startResult[A](f: => A): Either[String, A] = try Right(f) catch {
     case ServerStartException(message, _) => Left(message)
   }
 
-  def exitResult[A](f: => A): Either[String,A] = try Right(f) catch {
+  def exitResult[A](f: => A): Either[String, A] = try Right(f) catch {
     case ExitException(message, _, _) => Left(message)
   }
 
@@ -48,10 +48,9 @@ object ServerStartSpec extends Specification {
 
   /** A mocked ServerProcess */
   class FakeServerProcess(
-    val args: Seq[String] = Seq(),
-    propertyMap: Map[String,String] = Map(),
-    val pid: Option[String] = None
-  ) extends ServerProcess {
+      val args: Seq[String] = Seq(),
+      propertyMap: Map[String, String] = Map(),
+      val pid: Option[String] = None) extends ServerProcess {
 
     val classLoader: ClassLoader = getClass.getClassLoader
 
@@ -85,7 +84,6 @@ object ServerStartSpec extends Specification {
     @volatile var stopCallCount = 0
     override def stop() = {
       stopCallCount += 1
-      Play.stop()
       super.stop()
     }
   }
@@ -219,7 +217,6 @@ object ServerStartSpec extends Specification {
     }
 
   }
-
 
   "serverStart.createPidFile" should {
 
