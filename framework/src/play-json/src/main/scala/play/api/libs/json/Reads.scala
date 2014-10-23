@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.node.{ ArrayNode, ObjectNode }
 import Json._
 import play.api.data.validation.ValidationError
 import reflect.ClassTag
-import play.api.libs.json.JsError
 
 /**
  * Json deserializer: write an implicit to define a deserializer for any type.
@@ -161,6 +160,16 @@ trait DefaultReads {
   implicit object ShortReads extends Reads[Short] {
     def reads(json: JsValue) = json match {
       case JsNumber(n) => JsSuccess(n.toShort)
+      case _ => JsError(Seq(JsPath() -> Seq(ValidationError("error.expected.jsnumber"))))
+    }
+  }
+
+  /**
+   * Deserializer for Byte types.
+   */
+  implicit object ByteReads extends Reads[Byte] {
+    def reads(json: JsValue) = json match {
+      case JsNumber(n) => JsSuccess(n.toByte)
       case _ => JsError(Seq(JsPath() -> Seq(ValidationError("error.expected.jsnumber"))))
     }
   }
@@ -330,6 +339,37 @@ trait DefaultReads {
    * the default implicit joda.time.LocalDate reads
    */
   implicit val DefaultJodaLocalDateReads = jodaLocalDateReads("")
+
+  /**
+   * Reads for the `org.joda.time.LocalTime` type.
+   *
+   * @param pattern a date pattern, as specified in `org.joda.time.format.DateTimeFormat`.
+   * @param corrector string transformation function (See jodaTimeReads)
+   */
+  def jodaLocalTimeReads(pattern: String, corrector: String => String = identity): Reads[org.joda.time.LocalTime] = new Reads[org.joda.time.LocalTime] {
+
+    import org.joda.time.LocalTime
+    import org.joda.time.format.{ DateTimeFormat, ISODateTimeFormat }
+
+    val df = if (pattern == "") ISODateTimeFormat.localTimeParser else DateTimeFormat.forPattern(pattern)
+
+    def reads(json: JsValue): JsResult[LocalTime] = json match {
+      case JsNumber(n) => JsSuccess(new LocalTime(n.toLong))
+      case JsString(s) => parseTime(corrector(s)) match {
+        case Some(d) => JsSuccess(d)
+        case None => JsError(Seq(JsPath() -> Seq(ValidationError("error.expected.jodatime.format", pattern))))
+      }
+      case _ => JsError(Seq(JsPath() -> Seq(ValidationError("error.expected.time"))))
+    }
+
+    private def parseTime(input: String): Option[LocalTime] =
+      scala.util.control.Exception.allCatch[LocalTime] opt (LocalTime.parse(input, df))
+  }
+
+  /**
+   * the default implicit joda.time.LocalTime reads
+   */
+  implicit val DefaultJodaLocalTimeReads = jodaLocalTimeReads("")
 
   /**
    * Reads for the `java.sql.Date` type.

@@ -6,7 +6,9 @@ package play.api
 import javax.inject.Inject
 
 import com.google.inject.Singleton
-import play.api.inject.{ NewInstanceInjector, Injector, DefaultApplicationLifecycle }
+import play.api.http.{ DefaultHttpErrorHandler, HttpErrorHandler }
+import play.api.inject.{ SimpleInjector, NewInstanceInjector, Injector, DefaultApplicationLifecycle }
+import play.api.libs.{ Crypto, CryptoConfigParser, CryptoConfig }
 import play.core._
 import play.utils._
 
@@ -48,18 +50,13 @@ trait Application {
   def classloader: ClassLoader
 
   /**
-   * The `SourceMapper` used to retrieve source code displayed in error pages
-   */
-  def sources: Option[SourceMapper]
-
-  /**
    * `Dev`, `Prod` or `Test`
    */
   def mode: Mode.Mode
 
   def global: GlobalSettings
   def configuration: Configuration
-  def plugins: Seq[Plugin]
+  def plugins: Seq[Plugin.Deprecated]
 
   /**
    * Retrieves a plugin of type `T`.
@@ -97,44 +94,9 @@ trait Application {
   def routes: Router.Routes
 
   /**
-   * Handle a runtime error during the execution of an action
+   * The HTTP error handler
    */
-  private[play] def handleError(request: RequestHeader, e: Throwable): Future[Result] = try {
-    e match {
-      case e: UsefulException => throw e
-      case e: ExecutionException => handleError(request, e.getCause)
-      case e: Throwable => {
-
-        val source = sources.flatMap(_.sourceFor(e))
-
-        throw new PlayException.ExceptionSource(
-          "Execution exception",
-          "[%s: %s]".format(e.getClass.getSimpleName, e.getMessage),
-          e) {
-          def line = source.flatMap(_._2).map(_.asInstanceOf[java.lang.Integer]).orNull
-          def position = null
-          def input = source.map(_._1).map(PlayIO.readFileAsString).orNull
-          def sourceName = source.map(_._1.getAbsolutePath).orNull
-        }
-      }
-    }
-  } catch {
-    case NonFatal(e) => try {
-      Logger.error(
-        """
-        |
-        |! %sInternal server error, for (%s) [%s] ->
-        |""".stripMargin.format(e match {
-          case p: PlayException => "@" + p.id + " - "
-          case _ => ""
-        }, request.method, request.uri),
-        e
-      )
-      global.onError(request, e)
-    } catch {
-      case NonFatal(e) => DefaultGlobal.onError(request, e)
-    }
-  }
+  def errorHandler: HttpErrorHandler
 
   /**
    * Retrieves a file relative to the application root path.
@@ -228,12 +190,12 @@ class OptionalSourceMapper(val sourceMapper: Option[SourceMapper])
 
 @Singleton
 class DefaultApplication @Inject() (environment: Environment,
-    sourceMapper: OptionalSourceMapper,
     applicationLifecycle: DefaultApplicationLifecycle,
     override val injector: Injector,
     override val configuration: Configuration,
     override val global: GlobalSettings,
     override val routes: Router.Routes,
+    override val errorHandler: HttpErrorHandler,
     override val plugins: Plugins) extends Application {
 
   def path = environment.rootPath
@@ -241,8 +203,6 @@ class DefaultApplication @Inject() (environment: Environment,
   def classloader = environment.classLoader
 
   def mode = environment.mode
-
-  def sources = sourceMapper.sourceMapper
 
   def stop() = applicationLifecycle.stop()
 }
@@ -252,15 +212,22 @@ class DefaultApplication @Inject() (environment: Environment,
  */
 trait BuiltInComponents {
   def environment: Environment
-  def sourceMapper: OptionalSourceMapper
+  def sourceMapper: Option[SourceMapper]
   def webCommands: WebCommands
   def configuration: Configuration
   def global: GlobalSettings
 
   def routes: Router.Routes
 
+  lazy val injector: Injector = new SimpleInjector(NewInstanceInjector) + crypto
+
+  lazy val httpErrorHandler: HttpErrorHandler = new DefaultHttpErrorHandler(environment, configuration, sourceMapper,
+    Some(routes))
+
   lazy val applicationLifecycle: DefaultApplicationLifecycle = new DefaultApplicationLifecycle
-  lazy val injector: Injector = NewInstanceInjector
-  lazy val application: Application = new DefaultApplication(environment, sourceMapper, applicationLifecycle, injector,
-    configuration, global, routes, Plugins.empty)
+  lazy val application: Application = new DefaultApplication(environment, applicationLifecycle, injector,
+    configuration, global, routes, httpErrorHandler, Plugins.empty)
+
+  lazy val cryptoConfig: CryptoConfig = new CryptoConfigParser(environment, configuration).get
+  lazy val crypto: Crypto = new Crypto(cryptoConfig)
 }

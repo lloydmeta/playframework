@@ -51,6 +51,19 @@ object BuildSettings {
       (x => x == "true" || x == "") map
       (_ => true) getOrElse default
 
+  class SharedProjectScalaVersion(val scalaVersion: String, val targetDir: String) {
+    val nameSuffix:String = targetDir.replace(".","").trim()
+    def toSettings(targetPrefix:String):Seq[Setting[_]] = Seq(
+      target := target.value / s"$targetPrefix-$targetDir",
+      Keys.scalaVersion := scalaVersion
+    )
+  }
+
+  object SharedProjectScalaVersion {
+    def forScalaVersion(scalaVersion:String):SharedProjectScalaVersion =
+      new SharedProjectScalaVersion(scalaVersion,CrossVersion.binaryScalaVersion(scalaVersion))
+  }
+
   lazy val PerformanceTest = config("pt") extend Test
 
   def playCommonSettings: Seq[Setting[_]] = Seq(
@@ -59,7 +72,6 @@ object BuildSettings {
     scalaVersion := buildScalaVersion,
     homepage := Some(url("https://playframework.com")),
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
-    scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersion),
     ivyLoggingLevel := UpdateLogging.DownloadOnly,
     javacOptions ++= makeJavacOptions("1.6"),
     javacOptions in doc := Seq("-source", "1.6"),
@@ -74,7 +86,7 @@ object BuildSettings {
     parallelExecution in PerformanceTest := false
   )
 
-  def makeJavacOptions(version: String) = Seq("-source", version, "-target", version, "-encoding", "UTF-8", "-Xlint:-options")
+  def makeJavacOptions(version: String) = Seq("-source", version, "-target", version, "-encoding", "UTF-8", "-Xlint:-options", "-J-Xmx512m")
 
   /**
    * A project that is shared between the SBT runtime and the Play runtime
@@ -95,6 +107,14 @@ object BuildSettings {
         autoScalaLibrary := false,
         crossPaths := false
       )
+  }
+
+  def PlaySharedRuntimeProject(name: String, dir: String, targetPrefix:String, scalaVersion: SharedProjectScalaVersion, additionalSettings:Seq[Setting[_]]): Project = {
+    Project(name, file("src/" + dir))
+      .settings(playCommonSettings: _*)
+      .settings(scalariformSettings: _*)
+      .settings(scalaVersion.toSettings(targetPrefix): _*)
+      .settings(additionalSettings: _*)
   }
 
   /**
@@ -121,7 +141,7 @@ object BuildSettings {
   def playSbtCommonSettings: Seq[Setting[_]] = playCommonSettings ++ scalariformSettings ++ Seq(
     scalaVersion := buildScalaVersionForSbt,
     scalaBinaryVersion := CrossVersion.binaryScalaVersion(buildScalaVersionForSbt),
-    scalacOptions ++= Seq("-encoding", "UTF-8", "-Xlint", "-deprecation", "-unchecked")
+    scalacOptions ++= Seq("-encoding", "UTF-8", "-Xlint", "-deprecation", "-unchecked", "-feature")
   )
 
   /**
@@ -185,17 +205,36 @@ object PlayBuild extends Build {
     .settings(libraryDependencies ++= link)
     .dependsOn(PlayExceptionsProject)
 
+  def runSupportProject(prefix:String, sv:SharedProjectScalaVersion, additionalSettings: Seq[Setting[_]]) =
+    PlaySharedRuntimeProject(s"$prefix-${sv.nameSuffix}", s"run-support", prefix, sv, additionalSettings).settings(
+      libraryDependencies ++= runSupportDependencies
+    )
+
+  lazy val SbtRunSupportProject = runSupportProject("SBT-Run-Support",SharedProjectScalaVersion.forScalaVersion(buildScalaVersionForSbt),PublishSettings.sbtPluginPublishSettings)
+
+  lazy val RunSupportProject = runSupportProject("Run-Support", SharedProjectScalaVersion.forScalaVersion(buildScalaVersion),PublishSettings.publishSettings)
+
   lazy val RoutesCompilerProject = PlaySbtProject("Routes-Compiler", "routes-compiler")
-    .settings(libraryDependencies ++= routersCompilerDependencies)
+    .enablePlugins(SbtTwirl)
+    .settings(
+      libraryDependencies ++= routersCompilerDependencies,
+      TwirlKeys.templateFormats := Map("twirl" -> "play.routes.compiler.ScalaFormat")
+    )
 
   lazy val AnormProject = PlayRuntimeProject("Anorm", "anorm")
     .settings(
       libraryDependencies ++= anormDependencies,
-      addScalaModules(scalaParserCombinators)
+      addScalaModules(scalaParserCombinators),
+      // quieten deprecation warnings in tests
+      scalacOptions in Test := (scalacOptions in Test).value diff Seq("-deprecation")
     )
 
   lazy val IterateesProject = PlayRuntimeProject("Play-Iteratees", "iteratees")
     .settings(libraryDependencies ++= iterateesDependencies)
+
+  lazy val StreamsProject = PlayRuntimeProject("Play-Streams-Experimental", "play-streams")
+    .settings(libraryDependencies ++= streamsDependencies)
+    .dependsOn(IterateesProject)
 
   lazy val FunctionalProject = PlayRuntimeProject("Play-Functional", "play-functional")
 
@@ -236,6 +275,22 @@ object PlayBuild extends Build {
   lazy val PlayNettyServerProject = PlayRuntimeProject("Play-Netty-Server", "play-netty-server")
     .settings(libraryDependencies ++= netty)
     .dependsOn(PlayServerProject)
+
+  import ScriptedPlugin._
+
+  lazy val PlayAkkaHttpServerProject = PlayRuntimeProject("Play-Akka-Http-Server-Experimental", "play-akka-http-server")
+    .settings(libraryDependencies ++= akkaHttp)
+     // Include scripted tests here as well as in the SBT Plugin, because we
+     // don't want the SBT Plugin to have a dependency on an experimental module.
+    .settings(scriptedSettings: _*)
+    .settings(
+      scriptedLaunchOpts ++= Seq(
+        "-XX:MaxPermSize=384M",
+        "-Dproject.version=" + version.value
+      )
+    )
+    .dependsOn(PlayServerProject, StreamsProject)
+    .dependsOn(PlayTestProject % "test", PlayWsProject % "test")
 
   lazy val PlayJdbcProject = PlayRuntimeProject("Play-JDBC", "play-jdbc")
     .settings(libraryDependencies ++= jdbcDeps)
@@ -286,8 +341,6 @@ object PlayBuild extends Build {
       libraryDependencies ++= playDocsDependencies
     ).dependsOn(PlayNettyServerProject)
 
-  import ScriptedPlugin._
-
   lazy val SbtPluginProject = PlaySbtPluginProject("SBT-Plugin", "sbt-plugin")
     .settings(
       libraryDependencies ++= sbtDependencies,
@@ -298,16 +351,36 @@ object PlayBuild extends Build {
         }.sorted.foreach(println)
       },
       scriptedLaunchOpts ++= Seq(
+        "-Xmx768m",
         "-XX:MaxPermSize=384M",
         "-Dperformance.log=" + new File(baseDirectory.value, "target/sbt-repcomile-performance.properties"),
         "-Dproject.version=" + version.value
-      )
-    ).dependsOn(BuildLinkProject, PlayExceptionsProject, RoutesCompilerProject)
+      ),
+      scriptedDependencies := {
+        val () = publishLocal.value
+        val () = (publishLocal in BuildLinkProject).value
+        val () = (publishLocal in PlayExceptionsProject).value
+        val () = (publishLocal in RoutesCompilerProject).value
+        val () = (publishLocal in SbtRunSupportProject).value
+        val () = (publishLocal in PlayNettyServerProject).value
+        val () = (publishLocal in PlayTestProject).value
+        val () = (publishLocal in PlayDocsProject).value
+        val () = (publishLocal in PlayServerProject).value
+        val () = (publishLocal in PlayProject).value
+        val () = (publishLocal in PlayNettyUtilsProject).value
+        val () = (publishLocal in JsonProject).value
+        val () = (publishLocal in IterateesProject).value
+        val () = (publishLocal in FunctionalProject).value
+        val () = (publishLocal in DataCommonsProject).value
+      }
+    ).dependsOn(BuildLinkProject, PlayExceptionsProject, RoutesCompilerProject, SbtRunSupportProject)
 
   lazy val PlayWsProject = PlayRuntimeProject("Play-WS", "play-ws")
     .settings(
       libraryDependencies ++= playWsDeps,
-      parallelExecution in Test := false
+      parallelExecution in Test := false,
+      // quieten deprecation warnings in tests
+      scalacOptions in Test := (scalacOptions in Test).value diff Seq("-deprecation")
     ).dependsOn(PlayProject)
     .dependsOn(PlayTestProject % "test")
 
@@ -374,6 +447,7 @@ object PlayBuild extends Build {
     DataCommonsProject,
     JsonProject,
     RoutesCompilerProject,
+    PlayAkkaHttpServerProject,
     PlayCacheProject,
     PlayJdbcProject,
     PlayJavaProject,
@@ -385,13 +459,16 @@ object PlayBuild extends Build {
     PlayServerProject,
     PlayWsProject,
     PlayWsJavaProject,
+    SbtRunSupportProject,
+    RunSupportProject,
     SbtPluginProject,
     PlayTestProject,
     PlayExceptionsProject,
     PlayDocsProject,
     PlayFiltersHelpersProject,
     PlayIntegrationTestProject,
-    PlayDocsSbtPlugin
+    PlayDocsSbtPlugin,
+    StreamsProject
   )
 
   lazy val Root = Project(

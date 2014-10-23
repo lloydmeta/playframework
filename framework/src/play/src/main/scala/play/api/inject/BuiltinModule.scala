@@ -6,6 +6,8 @@ package play.api.inject
 import javax.inject.{ Singleton, Inject, Provider }
 
 import play.api._
+import play.api.http.{ GlobalSettingsHttpErrorHandler, HttpErrorHandler }
+import play.api.libs.{ CryptoConfig, Crypto, CryptoConfigParser }
 import play.core.Router
 
 class BuiltinModule extends Module {
@@ -24,14 +26,28 @@ class BuiltinModule extends Module {
       // bind Plugins - eager
 
       bind[Router.Routes].toProvider[RoutesProvider],
-      bind[Plugins].toProvider[PluginsProvider]
-    )
+      bind[Plugins].toProvider[PluginsProvider],
+
+      bind[CryptoConfig].toProvider[CryptoConfigParser],
+      bind[Crypto].toSelf
+    ) ++ HttpErrorHandler.bindingsFromConfiguration(env, configuration)
   }
 }
 
 @Singleton
-class RoutesProvider @Inject() (environment: Environment, configuration: Configuration) extends Provider[Router.Routes] {
-  lazy val get = Router.load(environment, configuration)
+class RoutesProvider @Inject() (injector: Injector, environment: Environment, configuration: Configuration) extends Provider[Router.Routes] {
+  lazy val get = {
+    val prefix = configuration.getString("application.context").map { prefix =>
+      if (!prefix.startsWith("/")) {
+        throw configuration.reportError("application.context", "Invalid application context")
+      }
+      prefix
+    }
+
+    val router = Router.load(environment, configuration)
+      .fold[Router.Routes](Router.Null)(injector.instanceOf(_))
+    prefix.fold(router)(router.withPrefix)
+  }
 }
 
 @Singleton

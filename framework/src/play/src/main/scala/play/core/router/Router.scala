@@ -3,6 +3,7 @@
  */
 package play.core
 
+import play.api.http.{ DefaultHttpErrorHandler, HttpErrorHandler }
 import play.api.mvc._
 import org.apache.commons.lang3.reflect.MethodUtils
 
@@ -10,7 +11,7 @@ import java.net.URI
 import scala.util.control.{ NonFatal, Exception }
 import play.core.j.JavaActionAnnotations
 import play.utils.{ Reflect, UriEncoding }
-import play.api.{ Environment, Configuration, Plugin }
+import play.api.{ Environment, Configuration }
 
 trait PathPart
 
@@ -74,30 +75,23 @@ case class PathPattern(parts: Seq[PathPart]) {
  */
 object Router {
 
-  def load(env: Environment, configuration: Configuration): Routes = {
+  /**
+   * Try to load the configured routes class.
+   *
+   * @return The routes class if configured or if a default one in the root package was detected.
+   */
+  def load(env: Environment, configuration: Configuration): Option[Class[_ <: Routes]] = {
+    val className = configuration.getString("application.router")
+
     try {
-      val className = configuration.getString("application.router").fold("Routes$")(_ + "$")
-      val router = Reflect.getClass[Router.Routes](className, env.classLoader)
-        .getDeclaredField("MODULE$")
-        .get(null)
-        .asInstanceOf[Router.Routes]
-
-      val prefix = configuration.getString("application.context").fold("/") { prefix =>
-        if (!prefix.startsWith("/")) {
-          throw configuration.reportError("application.context", "Invalid application context")
-        }
-        prefix
-      }
-
-      router.setPrefix(prefix)
-
-      router
+      Some(Reflect.getClass[Router.Routes](className.getOrElse("Routes"), env.classLoader))
     } catch {
       case e: ClassNotFoundException =>
-        configuration.getString("application.router").map { routerName =>
+        // Only throw an exception if a router was explicitly configured, but not found.
+        // Otherwise, it just means this application has no router, and that's ok.
+        className.map { routerName =>
           throw configuration.reportError("application.router", "Router not found: " + routerName)
         }
-        Null
     }
   }
 
@@ -123,15 +117,13 @@ object Router {
   }
 
   object Include {
+    def apply(router: Router.Routes) = new Include(router)
+  }
 
-    def apply(router: Router.Routes) = new {
-
-      def unapply(request: RequestHeader): Option[Handler] = {
-        router.routes.lift(request)
-      }
-
+  class Include(val router: Router.Routes) {
+    def unapply(request: RequestHeader): Option[Handler] = {
+      router.routes.lift(request)
     }
-
   }
 
   /**
@@ -341,12 +333,12 @@ object Router {
 
     def routes: PartialFunction[RequestHeader, Handler]
 
-    def setPrefix(prefix: String)
+    def withPrefix(prefix: String): Routes
 
-    def prefix: String
+    def errorHandler: HttpErrorHandler
 
     def badRequest(error: String) = Action.async { request =>
-      play.api.Play.maybeApplication.map(_.global.onBadRequest(request, error)).getOrElse(play.api.DefaultGlobal.onBadRequest(request, error))
+      errorHandler.onClientError(request, play.api.http.Status.BAD_REQUEST, error)
     }
 
     def call(generator: => Handler): Handler = {
@@ -530,11 +522,10 @@ object Router {
    * A null router
    */
   object Null extends Routes {
-    var _prefix: String = _
     def documentation = Nil
-    def prefix = _prefix
-    def setPrefix(prefix: String) = _prefix = prefix
+    def withPrefix(prefix: String) = this
     def routes = PartialFunction.empty
+    def errorHandler = DefaultHttpErrorHandler
   }
 
 }

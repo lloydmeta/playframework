@@ -13,6 +13,7 @@ import scala.language.postfixOps
 
 import play.api._
 import play.utils.{ PlayIO, Resources }
+import play.Logger
 
 import scala.util.parsing.input._
 import scala.util.parsing.combinator._
@@ -234,7 +235,10 @@ object Messages {
     }
   }
 
-  private def noMatch(key: String, args: Seq[Any]) = key
+  private def noMatch(key: String, args: Seq[Any]) = {
+    Logger.warn(s"i18n: missing translation key $key")
+    key
+  }
 
   /**
    * A source for messages
@@ -524,7 +528,7 @@ class DefaultMessagesApi @Inject() (environment: Environment, configuration: Con
     import scala.collection.JavaConverters._
 
     environment.classLoader.getResources(joinPaths(messagesPrefix, file)).asScala.toList
-      .filterNot(Resources.isDirectory).reverse
+      .filterNot(url => Resources.isDirectory(environment.classLoader, url)).reverse
       .map { messageFile =>
         Messages.messages(Messages.UrlMessageSource(messageFile), messageFile.toString).fold(e => throw e, identity)
       }.foldLeft(Map.empty[String, String]) { _ ++ _ }

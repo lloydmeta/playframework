@@ -72,9 +72,26 @@ trait PlayCommands extends PlayEclipse with PlayInternalKeys {
     )
   }
 
+  def configuredEbeanModels = Def.setting {
+    import com.typesafe.config._
+    import collection.JavaConverters._
+
+    val config = sys.props.get("config.resource").map(ConfigFactory.parseResources).getOrElse {
+      val defaultFile = baseDirectory.value / "conf" / "application.conf"
+      val configFile = sys.props.get("config.file").fold(defaultFile)(file)
+      ConfigFactory.parseFileAnySyntax(configFile)
+    }
+
+    try {
+      config.getConfig("ebean").entrySet.asScala.map(_.getValue.unwrapped).toSet.mkString(",")
+    } catch {
+      case e: ConfigException.Missing => "models.*"
+    }
+  }
+
   // ----- Post compile (need to be refactored and fully configurable)
 
-  def PostCompile(scope: Configuration) = (sourceDirectory in scope, dependencyClasspath in scope, compile in scope, javaSource in scope, managedSourceDirectories in scope, classDirectory in scope, cacheDirectory in scope, compileInputs in compile in scope) map { (src, deps, analysis, javaSrc, srcManaged, classes, cacheDir, inputs) =>
+  def PostCompile(scope: Configuration) = (sourceDirectory in scope, dependencyClasspath in scope, compile in scope, javaSource in scope, managedSourceDirectories in scope, classDirectory in scope, compileInputs in compile in scope, ebeanModels in scope) map { (src, deps, analysis, javaSrc, srcManaged, classes, inputs, models) =>
 
     val classpath = (deps.map(_.data.getAbsolutePath).toArray :+ classes.getAbsolutePath).mkString(java.io.File.pathSeparator)
     val ebeanEnhancement = classpath.contains("play-java-ebean")
@@ -92,25 +109,12 @@ trait PlayCommands extends PlayEclipse with PlayInternalKeys {
 
         import com.avaje.ebean.enhance.agent._
         import com.avaje.ebean.enhance.ant._
-        import collection.JavaConverters._
-        import com.typesafe.config._
 
         val cl = ClassLoader.getSystemClassLoader
 
         val t = new Transformer(cp, "debug=-1")
 
         val ft = new OfflineFileTransform(t, cl, classes.getAbsolutePath, classes.getAbsolutePath)
-
-        lazy val file = {
-          Option(System.getProperty("config.file")).map(f => new File(f)).getOrElse(new File("conf/application.conf"))
-        }
-
-        val config = Option(System.getProperty("config.resource"))
-          .map(ConfigFactory.parseResources(_)).getOrElse(ConfigFactory.parseFileAnySyntax(file))
-
-        val models = try {
-          config.getConfig("ebean").entrySet.asScala.map(_.getValue.unwrapped).toSet.mkString(",")
-        } catch { case e: ConfigException.Missing => "models.*" }
 
         try {
           ft.process(models)
@@ -130,7 +134,7 @@ trait PlayCommands extends PlayEclipse with PlayInternalKeys {
 
       val managedClasses = ((srcManaged ** "*.scala").get ++ (srcManaged ** "*.java").get).map { managedSourceFile =>
         analysis.relations.products(managedSourceFile)
-      }.flatten x rebase(classes, managedClassesDirectory)
+      }.flatten pair rebase(classes, managedClassesDirectory)
 
       // Copy modified class files
       val managedSet = IO.copy(managedClasses)
@@ -219,7 +223,7 @@ trait PlayCommands extends PlayEclipse with PlayInternalKeys {
   def inAllProjects[T](allProjects: Seq[Reference], key: SettingKey[T], data: Settings[Scope]): Seq[T] =
     allProjects.flatMap { p => key in p get data }
 
-  def inAllDependencies[T](base: ProjectRef, key: SettingKey[T], structure: Load.BuildStructure): Seq[T] = {
+  def inAllDependencies[T](base: ProjectRef, key: SettingKey[T], structure: BuildStructure): Seq[T] = {
     def deps(ref: ProjectRef): Seq[ProjectRef] =
       Project.getProject(ref, structure).toList.flatMap { p =>
         p.dependencies.map(_.project) ++ p.aggregate
@@ -227,15 +231,26 @@ trait PlayCommands extends PlayEclipse with PlayInternalKeys {
     inAllDeps(base, deps, key, structure.data)
   }
 
+  def taskToSetting[T](task: TaskKey[T]): SettingKey[Task[T]] = Scoped.scopedSetting(task.scope, task.key)
+
   private[this] var commonClassLoader: ClassLoader = _
 
-  val playCommonClassloaderTask = (dependencyClasspath in Compile) map { classpath =>
+  val playCommonClassloaderTask = (dependencyClasspath in Compile, streams) map { (classpath, streams) =>
     lazy val commonJars: PartialFunction[java.io.File, java.net.URL] = {
       case jar if jar.getName.startsWith("h2-") || jar.getName == "h2.jar" => jar.toURI.toURL
     }
 
     if (commonClassLoader == null) {
-      commonClassLoader = new java.net.URLClassLoader(classpath.map(_.data).collect(commonJars).toArray, null /* important here, don't depend of the sbt classLoader! */ ) {
+
+      // The parent of the system classloader *should* be the extension classloader:
+      // http://www.onjava.com/pub/a/onjava/2005/01/26/classloading.html
+      // We use this because this is where things like Nashorn are located. We don't use the system classloader
+      // because it will be polluted with the sbt launcher and dependencies of the sbt launcher.
+      // See https://github.com/playframework/playframework/issues/3420 for discussion.
+      val parent = ClassLoader.getSystemClassLoader.getParent
+      streams.log.debug("Using parent loader for play common classloader: " + parent)
+
+      commonClassLoader = new java.net.URLClassLoader(classpath.map(_.data).collect(commonJars).toArray, parent) {
         override def toString = "Common ClassLoader: " + getURLs.map(_.toString).mkString(",")
       }
     }
@@ -244,7 +259,7 @@ trait PlayCommands extends PlayEclipse with PlayInternalKeys {
   }
 
   val playCompileEverythingTask = (state, thisProjectRef) flatMap { (s, r) =>
-    inAllDependencies(r, playAssetsWithCompilation.task, Project structure s).join
+    inAllDependencies(r, taskToSetting(playAssetsWithCompilation), Project structure s).join
   }
 
   val h2Command = Command.command("h2-browser") { state: State =>
@@ -331,10 +346,10 @@ trait PlayCommands extends PlayEclipse with PlayInternalKeys {
 
         (module \ "revision").map { rev =>
           Map(
-            'module -> (module \ "@organisation" text, module \ "@name" text, rev \ "@name"),
-            'evictedBy -> (rev \ "evicted-by").headOption.map(_ \ "@rev" text),
+            'module -> (((module \ "@organisation").text, (module \ "@name").text, rev \ "@name")),
+            'evictedBy -> (rev \ "evicted-by").headOption.map(e => (e \ "@rev").text),
             'requiredBy -> (rev \ "caller").map { caller =>
-              (caller \ "@organisation" text, caller \ "@name" text, caller \ "@callerrev" text)
+              ((caller \ "@organisation").text, (caller \ "@name").text, (caller \ "@callerrev").text)
             },
             'artifacts -> (rev \ "artifacts" \ "artifact").flatMap { artifact =>
               (artifact \ "@location").headOption.map(node => new java.io.File(node.text).getName)

@@ -1,0 +1,1 @@
+GET        /normal            controllers.Application.normal

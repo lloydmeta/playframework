@@ -154,8 +154,8 @@ public class F {
         }
 
         /**
-         * Create a Promise timer that throws a TimeoutException after a
-         * given timeout.
+         * Create a Promise timer that throws a PromiseTimeoutException after
+         * a given timeout.
          *
          * The returned Promise is usually combined with other Promises.
          *
@@ -167,8 +167,8 @@ public class F {
         }
 
         /**
-         * Create a Promise timer that throws a TimeoutException after a
-         * given timeout.
+         * Create a Promise timer that throws a PromiseTimeoutException after
+         * a given timeout.
          *
          * The returned Promise is usually combined with other Promises.
          *
@@ -642,9 +642,13 @@ public class F {
 
 
     /**
-     * exception for to notify of timeout of promise without api change.
+     * Exception thrown when an operation times out. This class provides an
+     * unchecked alternative to Java's TimeoutException.
      */
     public static class PromiseTimeoutException extends RuntimeException {
+        public PromiseTimeoutException(String message) {
+            super(message);
+        }
         public PromiseTimeoutException(String message, Throwable cause) {
             super(message, cause);
         }
@@ -758,6 +762,19 @@ public class F {
         @Override
         public boolean addAll(Collection<? extends T> c) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.deepHashCode(this.toArray());
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null) return false;
+            if (!(obj instanceof Option)) return false;
+            return Arrays.deepEquals(this.toArray(), ((Option)obj).toArray());
         }
 
     }

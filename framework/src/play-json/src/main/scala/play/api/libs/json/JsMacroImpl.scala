@@ -111,18 +111,20 @@ object JsMacroImpl {
         case s => s.asMethod
       }
 
-    val unapplyReturnTypes = unapply.returnType match {
-      case TypeRef(_, _, Nil) =>
+    val unapplyReturnTypes: Option[List[Type]] = unapply.returnType match {
+      case TypeRef(_, _, Nil) => {
         c.abort(c.enclosingPosition, s"Unapply of ${companionSymbol} has no parameters. Are you using an empty case class?")
+        None
+      }
       case TypeRef(_, _, args) =>
         args.head match {
           case t @ TypeRef(_, _, Nil) => Some(List(t))
-          case t @ TypeRef(_, _, args) =>
-            if (t <:< typeOf[Option[_]]) Some(List(t))
-            else if (t <:< typeOf[Seq[_]]) Some(List(t))
-            else if (t <:< typeOf[Set[_]]) Some(List(t))
-            else if (t <:< typeOf[Map[_, _]]) Some(List(t))
+          case t @ TypeRef(_, _, args) => {
+            import c.universe.definitions.TupleClass
+            if (!TupleClass.seq.exists(tupleSym => t.baseType(tupleSym) ne NoType)) Some(List(t))
             else if (t <:< typeOf[Product]) Some(args)
+            else None
+          }
           case _ => None
         }
       case _ => None
@@ -293,7 +295,7 @@ object JsMacroImpl {
     val importFunctionalSyntax = Import(functionalSyntaxPkg(c), List(ImportSelector(nme.WILDCARD, -1, null, -1)))
     if (!hasRec) {
       val block = Block(
-        importFunctionalSyntax,
+        List(importFunctionalSyntax),
         finalTree
       )
       block
@@ -308,41 +310,46 @@ object JsMacroImpl {
 
       val block = Select(
         Block(
-          importFunctionalSyntax,
-          ClassDef(
-            Modifiers(Flag.FINAL),
-            newTypeName("$anon"),
-            List(),
-            Template(
-              List(
-                AppliedTypeTree(
-                  lazyHelperSelect,
-                  List(
-                    Ident(matag.tpe.typeSymbol),
-                    Ident(atag.tpe.typeSymbol)
-                  )
-                )
-              ),
-              emptyValDef,
-              List(
-                DefDef(
-                  Modifiers(),
-                  nme.CONSTRUCTOR,
-                  List(),
-                  List(List()),
-                  TypeTree(),
-                  Block(
-                    Apply(
-                      Select(Super(This(tpnme.EMPTY), tpnme.EMPTY), nme.CONSTRUCTOR),
-                      List()
+          List(
+            importFunctionalSyntax,
+            ClassDef(
+              Modifiers(Flag.FINAL),
+              newTypeName("$anon"),
+              List(),
+              Template(
+                List(
+                  AppliedTypeTree(
+                    lazyHelperSelect,
+                    List(
+                      Ident(matag.tpe.typeSymbol),
+                      Ident(atag.tpe.typeSymbol)
                     )
                   )
                 ),
-                ValDef(
-                  Modifiers(Flag.OVERRIDE | Flag.LAZY),
-                  newTermName("lazyStuff"),
-                  AppliedTypeTree(Ident(matag.tpe.typeSymbol), List(TypeTree(atag.tpe))),
-                  finalTree
+                emptyValDef,
+                List(
+                  DefDef(
+                    Modifiers(),
+                    nme.CONSTRUCTOR,
+                    List(),
+                    List(List()),
+                    TypeTree(),
+                    Block(
+                      List(
+                        Apply(
+                          Select(Super(This(tpnme.EMPTY), tpnme.EMPTY), nme.CONSTRUCTOR),
+                          List()
+                        )
+                      ),
+                      Literal(Constant(()))
+                    )
+                  ),
+                  ValDef(
+                    Modifiers(Flag.OVERRIDE | Flag.LAZY),
+                    newTermName("lazyStuff"),
+                    AppliedTypeTree(Ident(matag.tpe.typeSymbol), List(TypeTree(atag.tpe))),
+                    finalTree
+                  )
                 )
               )
             )
@@ -355,4 +362,5 @@ object JsMacroImpl {
       block
     }
   }
+
 }

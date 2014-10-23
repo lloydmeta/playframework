@@ -182,7 +182,7 @@ case class Result(header: ResponseHeader, body: Enumerator[Array[Byte]],
    * @return the new result
    */
   def flashing(flash: Flash): Result = {
-    if (shouldWarnIfNotRedirect) {
+    if (shouldWarnIfNotRedirect(flash)) {
       logRedirectWarning("flashing")
     }
     withCookies(Flash.encodeAsCookie(flash))
@@ -283,9 +283,9 @@ case class Result(header: ResponseHeader, body: Enumerator[Array[Byte]],
   /**
    * Returns true if the status code is not 3xx and the application is in Dev mode.
    */
-  private def shouldWarnIfNotRedirect: Boolean = {
+  private def shouldWarnIfNotRedirect(flash: Flash): Boolean = {
     play.api.Play.maybeApplication.exists(app =>
-      (app.mode == play.api.Mode.Dev) && (header.status < 300 || header.status > 399))
+      (app.mode == play.api.Mode.Dev) && (!flash.isEmpty) && (header.status < 300 || header.status > 399))
   }
 
   /**
@@ -416,6 +416,22 @@ trait Results {
         header = ResponseHeader(status, writeable.contentType.map(ct => Map(CONTENT_TYPE -> ct)).getOrElse(Map.empty)),
         body = content &> writeable.toEnumeratee,
         connection = HttpConnection.Close
+      )
+    }
+
+    /**
+     * Stream the content as the response.
+     *
+     * If a content length is set, this will send the body as is, otherwise it may chunk or may not chunk depending on
+     * whether HTTP/1.1 is used or not.
+     *
+     * @param content Enumerator providing the content to stream.
+     */
+    def stream[C](content: Enumerator[C])(implicit writeable: Writeable[C]): Result = {
+      Result(
+        header = ResponseHeader(status, writeable.contentType.map(ct => Map(CONTENT_TYPE -> ct)).getOrElse(Map.empty)),
+        body = content &> writeable.toEnumeratee,
+        connection = HttpConnection.KeepAlive
       )
     }
   }
@@ -558,6 +574,7 @@ trait Results {
       Enumeratee.takeWhile[Either[Array[Byte], Seq[(String, String)]]](_.isLeft) ><>
       Enumeratee.map {
         case Left(data) => data
+        case Right(_) => Array.empty
       }
   }
 

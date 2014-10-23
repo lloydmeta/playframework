@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.data
 
@@ -36,6 +36,14 @@ object FormSpec extends Specification {
       myForm hasErrors () must beEqualTo(true)
       myForm.errors.get("dueDate").get(0).messages().asScala must contain("error.invalid.java.util.Date")
     }
+    "have an error due to missing required value" in {
+      val req = new DummyRequest(Map("id" -> Array("1234567891x"), "name" -> Array("peter")))
+      Context.current.set(new Context(666, null, req, Map.empty.asJava, Map.empty.asJava, Map.empty.asJava))
+
+      val myForm = Form.form(classOf[play.data.models.Task]).bindFromRequest()
+      myForm hasErrors () must beEqualTo(true)
+      myForm.errors.get("dueDate").get(0).messages().asScala must contain("error.required")
+    }
     "have an error due to bad value in Id field" in {
       val req = new DummyRequest(Map("id" -> Array("1234567891x"), "name" -> Array("peter"), "dueDate" -> Array("12/12/2009")))
       Context.current.set(new Context(666, null, req, Map.empty.asJava, Map.empty.asJava, Map.empty.asJava))
@@ -47,33 +55,33 @@ object FormSpec extends Specification {
 
     "support repeated values for Java binding" in {
 
-      val user1 = Form.form(classOf[play.data.AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki")))).get
+      val user1 = Form.form(classOf[AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki")))).get
       user1.getName must beEqualTo("Kiki")
       user1.getEmails.size must beEqualTo(0)
 
-      val user2 = Form.form(classOf[play.data.AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[0]" -> Array("kiki@gmail.com")))).get
+      val user2 = Form.form(classOf[AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[0]" -> Array("kiki@gmail.com")))).get
       user2.getName must beEqualTo("Kiki")
       user2.getEmails.size must beEqualTo(1)
 
-      val user3 = Form.form(classOf[play.data.AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[0]" -> Array("kiki@gmail.com"), "emails[1]" -> Array("kiki@zen.com")))).get
+      val user3 = Form.form(classOf[AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[0]" -> Array("kiki@gmail.com"), "emails[1]" -> Array("kiki@zen.com")))).get
       user3.getName must beEqualTo("Kiki")
       user3.getEmails.size must beEqualTo(2)
 
-      val user4 = Form.form(classOf[play.data.AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[]" -> Array("kiki@gmail.com")))).get
+      val user4 = Form.form(classOf[AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[]" -> Array("kiki@gmail.com")))).get
       user4.getName must beEqualTo("Kiki")
       user4.getEmails.size must beEqualTo(1)
 
-      val user5 = Form.form(classOf[play.data.AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[]" -> Array("kiki@gmail.com", "kiki@zen.com")))).get
+      val user5 = Form.form(classOf[AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "emails[]" -> Array("kiki@gmail.com", "kiki@zen.com")))).get
       user5.getName must beEqualTo("Kiki")
       user5.getEmails.size must beEqualTo(2)
 
     }
 
     "support option deserialization" in {
-      val user1 = Form.form(classOf[play.data.AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki")))).get
+      val user1 = Form.form(classOf[AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki")))).get
       user1.getCompany.isDefined must beEqualTo(false)
 
-      val user2 = Form.form(classOf[play.data.AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "company" -> Array("Acme")))).get
+      val user2 = Form.form(classOf[AnotherUser]).bindFromRequest(new DummyRequest(Map("name" -> Array("Kiki"), "company" -> Array("Acme")))).get
       user2.getCompany.get must beEqualTo("Acme")
     }
 
@@ -89,6 +97,14 @@ object FormSpec extends Specification {
       userEmail.bind(Map("email" -> "john@example.com").asJava).errors().asScala must beEmpty
       userEmail.bind(Map("email" -> "o'flynn@example.com").asJava).errors().asScala must beEmpty
       userEmail.bind(Map("email" -> "john@ex'ample.com").asJava).errors().asScala must not beEmpty
+    }
+
+    "support custom class validators" in {
+      val form = Form.form(classOf[Red])
+      val bound = form.bind(Map("name" -> "blue").asJava)
+      bound.hasErrors must_== true
+      bound.hasGlobalErrors must_== true
+      bound.globalErrors().asScala must not beEmpty
     }
 
     "work with the @repeat helper" in {

@@ -8,7 +8,7 @@ import play.api.mvc._
 import play.api.libs._
 import play.api.libs.iteratee._
 import java.io._
-import java.net.{ URL, JarURLConnection }
+import java.net.{ URL, URLConnection, JarURLConnection }
 import org.joda.time.format.{ DateTimeFormatter, DateTimeFormat }
 import org.joda.time.DateTimeZone
 import play.utils.{ InvalidUriEncodingException, UriEncoding }
@@ -17,10 +17,11 @@ import scala.util.control.NonFatal
 import scala.util.{ Success, Failure }
 import java.util.Date
 import play.api.libs.iteratee.Execution.Implicits
-import play.api.http.ContentTypes
+import play.api.http.{ LazyHttpErrorHandler, HttpErrorHandler, ContentTypes }
 import scala.collection.concurrent.TrieMap
 import play.core.Router.ReverseRouteContext
 import scala.io.Source
+import javax.inject.{ Inject, Singleton }
 
 /*
  * A map designed to prevent the "thundering herds" issue.
@@ -138,21 +139,28 @@ private[controllers] class AssetInfo(
     }
   }
 
-  val lastModified: Option[String] = url.getProtocol match {
-    case "file" => Some(df.print(new File(url.getPath).lastModified))
-    case "jar" =>
+  val lastModified: Option[String] = {
+    def getLastModified[T <: URLConnection](f: (T) => Long): Option[String] = {
       Option(url.openConnection).map {
-        case jarUrlConnection: JarURLConnection =>
+        case urlConnection: T @unchecked =>
           try {
-            jarUrlConnection.getJarEntry.getTime
+            f(urlConnection)
           } finally {
-            jarUrlConnection.getInputStream.close()
+            urlConnection.getInputStream.close()
           }
       }.filterNot(_ == -1).map(df.print)
-    case _ => None
+    }
+
+    url.getProtocol match {
+      case "file" => Some(df.print(new File(url.getPath).lastModified))
+      case "jar" => getLastModified[JarURLConnection](c => c.getJarEntry.getTime)
+      case "bundle" => getLastModified[URLConnection](c => c.getLastModified)
+      case _ => None
+    }
   }
 
-  val etag: Option[String] = digest.orElse(lastModified.map(_ + " -> " + url.toExternalForm).map("\"" + Codecs.sha1(_) + "\""))
+  val etag: Option[String] =
+    digest orElse { lastModified map (m => Codecs.sha1(m + " -> " + url.toExternalForm)) } map ("\"" + _ + "\"")
 
   val mimeType: String = MimeTypes.forFileName(name).fold(ContentTypes.BINARY)(addCharsetIfNeeded)
 
@@ -199,7 +207,7 @@ private[controllers] class AssetInfo(
  * GET     /assets/\uFEFF*file               controllers.Assets.at(path="/public", file)
  * }}}
  */
-object Assets extends AssetsBuilder {
+object Assets extends AssetsBuilder(LazyHttpErrorHandler) {
 
   import AssetInfo._
 
@@ -306,7 +314,10 @@ object Assets extends AssetsBuilder {
   }
 }
 
-class AssetsBuilder extends Controller {
+@Singleton
+class Assets @Inject() (errorHandler: HttpErrorHandler) extends AssetsBuilder(errorHandler)
+
+class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
 
   import Assets._
   import AssetInfo._
@@ -406,30 +417,28 @@ class AssetsBuilder extends Controller {
         assetInfoForRequest(request, name)
       } getOrElse Future.successful(None)
 
-      val pendingResult: Future[Result] = assetInfoFuture.map {
+      val pendingResult: Future[Result] = assetInfoFuture.flatMap {
         case Some((assetInfo, gzipRequested)) =>
           val stream = assetInfo.url(gzipRequested).openStream()
           val length = stream.available
           val resourceData = Enumerator.fromStream(stream)(Implicits.defaultExecutionContext)
 
-          maybeNotModified(request, assetInfo, aggressiveCaching).getOrElse {
+          Future.successful(maybeNotModified(request, assetInfo, aggressiveCaching).getOrElse {
             cacheableResult(
               assetInfo,
               aggressiveCaching,
               result(file, length, assetInfo.mimeType, resourceData, gzipRequested, assetInfo.gzipUrl.isDefined)
             )
-          }
-        case None => NotFound
+          })
+        case None => errorHandler.onClientError(request, NOT_FOUND, "Resource not found by Assets controller")
       }
 
       pendingResult.recoverWith {
         case e: InvalidUriEncodingException =>
-          Play.maybeApplication.fold(Future.successful(BadRequest: Result)) { app =>
-            app.global.onBadRequest(request, s"Invalid URI encoding for $file at $path: " + e.getMessage)
-          }
+          errorHandler.onClientError(request, BAD_REQUEST, s"Invalid URI encoding for $file at $path: " + e.getMessage)
         case NonFatal(e) =>
           // Add a bit more information to the exception for better error reporting later
-          throw new RuntimeException(s"Unexpected error while serving $file at $path: " + e.getMessage, e)
+          errorHandler.onServerError(request, new RuntimeException(s"Unexpected error while serving $file at $path: " + e.getMessage, e))
       }
   }
 

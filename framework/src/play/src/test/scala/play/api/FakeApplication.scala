@@ -3,7 +3,8 @@
  */
 package play.api
 
-import play.core.{ Router, SourceMapper }
+import play.api.http.DefaultHttpErrorHandler
+import play.core.Router
 import java.io.File
 
 import scala.concurrent.Future
@@ -14,12 +15,12 @@ import scala.concurrent.Future
  */
 case class FakeApplication(config: Map[String, Any] = Map(),
     path: File = new File("."),
-    sources: Option[SourceMapper] = None,
     mode: Mode.Mode = Mode.Test,
     global: GlobalSettings = DefaultGlobal,
-    plugins: Seq[Plugin] = Nil) extends Application {
+    plugins: Seq[Plugin.Deprecated] = Nil) extends Application {
   val classloader = Thread.currentThread.getContextClassLoader
   lazy val configuration = Configuration.from(config)
   def stop() = Future.successful(())
   val routes = Router.Null
+  val errorHandler = DefaultHttpErrorHandler
 }

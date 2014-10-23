@@ -3,7 +3,8 @@
  */
 package play
 
-import play.sbtplugin.run.PlayWatchService
+import play.runsupport.PlayWatchService
+import play.sbtplugin.run._
 import sbt._
 import sbt.Keys._
 import play.PlayImport._
@@ -130,6 +131,8 @@ trait PlaySettings {
     shellPrompt := playPrompt,
 
     mainClass in (Compile, run) := Some("play.core.server.NettyServer"),
+
+    ebeanModels := configuredEbeanModels.value,
 
     compile in Compile <<= PostCompile(scope = Compile),
 

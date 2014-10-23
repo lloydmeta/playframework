@@ -16,6 +16,7 @@ import org.junit.runner.Description
 import org.junit.runners.model.{ FrameworkMethod, Statement }
 import org.junit.{ Rule, Test }
 import org.junit.rules.TestRule
+import play.api.http.DefaultHttpErrorHandler
 import play.api.inject.{ NewInstanceInjector, DefaultApplicationLifecycle }
 import play.api.mvc.{ Action, Controller, Handler, RequestHeader }
 import play.api._
@@ -43,8 +44,8 @@ class ServerBenchmark extends NettyRunners {
       Configuration.load(environment.rootPath, environment.mode)
     }
 
-    val application = new DefaultApplication(environment, new OptionalSourceMapper(None),
-      new DefaultApplicationLifecycle, NewInstanceInjector, configuration, DefaultGlobal, Routes, Plugins.empty)
+    val application = new DefaultApplication(environment, new DefaultApplicationLifecycle, NewInstanceInjector,
+      configuration, DefaultGlobal, Routes, DefaultHttpErrorHandler, Plugins.empty)
 
     val remoteAddress = new InetSocketAddress(8080)
 
@@ -109,26 +110,24 @@ class ServerBenchmark extends NettyRunners {
 
     private var _prefix = "/"
 
-    def setPrefix(prefix: String) {
-      _prefix = prefix
-      List[(String, Routes)]().foreach {
-        case (p, router) => router.setPrefix(prefix + (if (prefix.endsWith("/")) "" else "/") + p)
-      }
-    }
+    override val errorHandler = DefaultHttpErrorHandler
 
-    def prefix = _prefix
+    def withPrefix(prefix: String) = {
+      _prefix = prefix
+      this
+    }
 
     lazy val defaultPrefix = {
-      if (Routes.prefix.endsWith("/")) "" else "/"
+      if (_prefix.endsWith("/")) "" else "/"
     }
 
-    private[this] lazy val hello_world_route = Route("GET", PathPattern(List(StaticPart(Routes.prefix))))
+    private[this] lazy val hello_world_route = Route("GET", PathPattern(List(StaticPart(Routes._prefix))))
     private[this] lazy val hello_world_invoker = createInvoker(
       HelloWorldApp.helloWorld,
-      HandlerDef(this.getClass.getClassLoader, "", "hello_world", "index", Nil, "GET", """ Home page""", Routes.prefix + """""")
+      HandlerDef(this.getClass.getClassLoader, "", "hello_world", "index", Nil, "GET", """ Home page""", Routes._prefix + """""")
     )
 
-    def documentation = List(("""GET""", prefix, """hello_world""")).foldLeft(List.empty[(String, String, String)]) {
+    def documentation = List(("""GET""", _prefix, """hello_world""")).foldLeft(List.empty[(String, String, String)]) {
       (s, e) =>
         e.asInstanceOf[Any] match {
           case r @ (_, _, _) => s :+ r.asInstanceOf[(String, String, String)]

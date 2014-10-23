@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
  */
+
+import play.routes.compiler.InjectedRoutesGenerator
 import play.sbtplugin.routes.RoutesCompiler
 import sbt._
 import sbt.Keys._
@@ -57,20 +59,15 @@ object ApplicationBuild extends Build {
     version := PlayVersion.current,
     scalaVersion := PlayVersion.scalaVersion,
     libraryDependencies ++= Seq(
-      component("play") % "test",
-      component("play-test") % "test",
-      component("play-java") % "test",
-      component("play-cache") % "test",
-      component("play-java-ws") % "test",
-      component("filters-helpers") % "test",
-      "org.mockito" % "mockito-core" % "1.9.5" % "test",
-      component("play-docs")
+      "org.mockito" % "mockito-core" % "1.9.5" % "test"
     ),
 
     PlayDocsKeys.fallbackToJar := false,
 
-    javaManualSourceDirectories <<= (baseDirectory)(base => (base / "manual" / "javaGuide" ** codeFilter).get),
-    scalaManualSourceDirectories <<= (baseDirectory)(base => (base / "manual" / "scalaGuide" ** codeFilter).get),
+    PlayDocsKeys.docsJarFile := (packageBin in (playDocs, Compile)).value,
+
+    javaManualSourceDirectories <<= (baseDirectory)(base => (base / "manual" / "working" / "javaGuide" ** codeFilter).get),
+    scalaManualSourceDirectories <<= (baseDirectory)(base => (base / "manual" / "working" / "scalaGuide" ** codeFilter).get),
 
     javaManualSourceDirectories <++= (baseDirectory) { base =>
       if (isJavaAtLeast("1.8")) (base / "manual" / "javaGuide" ** "java8code").get else Nil
@@ -110,16 +107,31 @@ object ApplicationBuild extends Build {
     },
 
     sourceGenerators in Test <+= (javaManualSourceDirectories, sourceManaged, streams) map { (from, to, s) =>
-      RoutesCompiler.compileRoutes((from * "*.routes").get, to, Seq("play.libs.F"), true, true, true, s.cacheDirectory / "javaroutes", s.log)
+      RoutesCompiler.compileRoutes((from * "*.routes").get, InjectedRoutesGenerator, to, Seq("play.libs.F"), true, true,
+        true, s.cacheDirectory / "javaroutes", s.log)
     },
     sourceGenerators in Test <+= (scalaManualSourceDirectories, sourceManaged, streams) map { (from, to, s) =>
-      RoutesCompiler.compileRoutes((from * "*.routes").get, to, Nil, true, true, true, s.cacheDirectory / "scalaroutes", s.log)
+      RoutesCompiler.compileRoutes((from * "*.routes").get, InjectedRoutesGenerator, to, Nil, true, true, true,
+        s.cacheDirectory / "scalaroutes", s.log)
     },
 
     testOptions in Test += Tests.Argument(TestFrameworks.Specs2, "sequential", "true", "junitxml", "console"),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "--ignore-runners=org.specs2.runner.JUnitRunner")
 
   ).settings(externalPlayModuleSettings:_*)
+   .dependsOn(
+      playDocs,
+      playProject("Play") % "test",
+      playProject("Play-Test") % "test",
+      playProject("Play-Java") % "test",
+      playProject("Play-Cache") % "test",
+      playProject("Play-Java-WS") % "test",
+      playProject("Filters-Helpers") % "test"
+  )
+
+  lazy val playDocs = playProject("Play-Docs")
+
+  def playProject(name: String) = ProjectRef(Path.fileProperty("user.dir").getParentFile / "framework", name)
 
   val templateFormats = Map("html" -> "play.twirl.api.HtmlFormat")
   val templateFilter = "*.scala.*"

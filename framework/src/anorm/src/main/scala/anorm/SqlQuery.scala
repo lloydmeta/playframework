@@ -1,6 +1,7 @@
 package anorm
 
 import java.sql.{ Connection, PreparedStatement }
+import resource.ManagedResource
 
 /** Initial SQL query, without parameter values. */
 sealed trait SqlQuery {
@@ -22,10 +23,11 @@ sealed trait SqlQuery {
   @deprecated(message = "Use [[timeout]]", since = "2.3.2")
   final def queryTimeout = timeout
 
+  @deprecated(message = "Use [[Sql.preparedStatement]]", since = "2.3.6")
   def getFilledStatement(connection: Connection, getGeneratedKeys: Boolean = false): PreparedStatement = asSimple.getFilledStatement(connection, getGeneratedKeys)
 
   /** Returns this query with timeout updated to `seconds` delay. */
-  def withQueryTimeout(seconds: Option[Int]): SqlQuery = copy(timeout = seconds)
+  def withQueryTimeout(seconds: Option[Int]): SqlQuery = SqlQuery.prepare(statement, paramsInitialOrder, seconds)
 
   private[anorm] def asSimple: SimpleSql[Row] = asSimple(defaultParser)
 

@@ -41,6 +41,17 @@ public class FakeRequest {
     }
 
     /**
+     * Change the remote-address for this request.
+     * @param remoteAddress the remote address, e.g. "127.0.0.1"
+     * @return the Fake Request
+     */
+    @SuppressWarnings(value = "unchecked")
+    public FakeRequest withRemoteAddress(String remoteAddress) {
+        fake = new play.api.test.FakeRequest(fake.method(), fake.uri(), fake.headers(), fake.body(), remoteAddress, fake.version(), fake.id(), fake.tags(), fake.secure());
+        return this;
+    }
+
+    /**
      * Add additional headers to this request.
      */
     @SuppressWarnings(value = "unchecked")
@@ -56,6 +67,7 @@ public class FakeRequest {
      * @param method The method to be set
      * @return the Fake Request
      */
+    @SuppressWarnings(value = "unchecked")
     public FakeRequest withAnyContent(AnyContent content, String contentType, String method) {
         Map<String, Seq<String>> map = new HashMap<String, Seq<String>>(Scala.asJava(fake.headers().toMap()));
         map.put("Content-Type", Scala.toSeq(new String[] {contentType}));
@@ -170,9 +182,8 @@ public class FakeRequest {
                         anyContent.asText(),
                         anyContent.asJson(),
                         anyContent.asXml(),
-                        anyContent.asMultipartFormData(),
-                        false
-                        );
+                        anyContent.asMultipartFormData()
+                );
             }
         });
     }
@@ -212,6 +223,7 @@ public class FakeRequest {
      * @param body the Body
      * @return the Fake Request
      */
+    @SuppressWarnings(value = "unchecked")
     public <T> FakeRequest withBody(T body) {
         this.fake = this.fake.withBody(body);
         return this;

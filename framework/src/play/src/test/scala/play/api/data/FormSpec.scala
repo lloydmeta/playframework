@@ -34,6 +34,60 @@ object FormSpec extends Specification {
       ScalaForms.emailForm.fillAndValidate(("o'flynn@example.com", "O'Flynn")).errors must beEmpty
     }
 
+    "support mapping 22 fields" in {
+      val form = Form(
+        tuple(
+          "k1" -> of[String],
+          "k2" -> of[String],
+          "k3" -> of[String],
+          "k4" -> of[String],
+          "k5" -> of[String],
+          "k6" -> of[String],
+          "k7" -> of[String],
+          "k8" -> of[String],
+          "k9" -> of[String],
+          "k10" -> of[String],
+          "k11" -> of[String],
+          "k12" -> of[String],
+          "k13" -> of[String],
+          "k14" -> of[String],
+          "k15" -> of[String],
+          "k16" -> of[String],
+          "k17" -> of[String],
+          "k18" -> of[String],
+          "k19" -> of[String],
+          "k20" -> of[String],
+          "k21" -> of[String],
+          "k22" -> of[String]
+        )
+      )
+
+      form.bind(Map(
+        "k1" -> "v1",
+        "k2" -> "v2",
+        "k3" -> "v3",
+        "k4" -> "v4",
+        "k5" -> "v5",
+        "k6" -> "v6",
+        "k7" -> "v7",
+        "k8" -> "v8",
+        "k9" -> "v9",
+        "k10" -> "v10",
+        "k11" -> "v11",
+        "k12" -> "v12",
+        "k13" -> "v13",
+        "k14" -> "v14",
+        "k15" -> "v15",
+        "k16" -> "v16",
+        "k17" -> "v17",
+        "k18" -> "v18",
+        "k19" -> "v19",
+        "k20" -> "v20",
+        "k21" -> "v21",
+        "k22" -> "v22"
+      )).fold(_ => "errors", t => t._21) must_== "v21"
+    }
+
     "apply constraints on wrapped mappings" in {
       "when it binds data" in {
         val f1 = ScalaForms.form.bind(Map("foo" -> "0"))
@@ -84,6 +138,38 @@ object FormSpec extends Specification {
       f3.errors must beEmpty
 
       val f4 = ScalaForms.longNumberForm.fillAndValidate(42)
+      f4.errors must beEmpty
+    }
+
+    "apply constraints on shortNumber fields" in {
+      val f1 = ScalaForms.shortNumberForm.fillAndValidate(0)
+      f1.errors must haveSize(1)
+      f1.errors.find(_.message == "error.min") must beSome
+
+      val f2 = ScalaForms.shortNumberForm.fillAndValidate(9000)
+      f2.errors must haveSize(1)
+      f2.errors.find(_.message == "error.max") must beSome
+
+      val f3 = ScalaForms.shortNumberForm.fillAndValidate(10)
+      f3.errors must beEmpty
+
+      val f4 = ScalaForms.shortNumberForm.fillAndValidate(42)
+      f4.errors must beEmpty
+    }
+
+    "apply constraints on byteNumber fields" in {
+      val f1 = ScalaForms.byteNumberForm.fillAndValidate(0)
+      f1.errors must haveSize(1)
+      f1.errors.find(_.message == "error.min") must beSome
+
+      val f2 = ScalaForms.byteNumberForm.fillAndValidate(9000)
+      f2.errors must haveSize(1)
+      f2.errors.find(_.message == "error.max") must beSome
+
+      val f3 = ScalaForms.byteNumberForm.fillAndValidate(10)
+      f3.errors must beEmpty
+
+      val f4 = ScalaForms.byteNumberForm.fillAndValidate(42)
       f4.errors must beEmpty
     }
 
@@ -259,4 +345,8 @@ object ScalaForms {
   )
 
   val longNumberForm = Form("longNumber" -> longNumber(10, 42))
+
+  val shortNumberForm = Form("shortNumber" -> shortNumber(10, 42))
+
+  val byteNumberForm = Form("byteNumber" -> shortNumber(10, 42))
 }

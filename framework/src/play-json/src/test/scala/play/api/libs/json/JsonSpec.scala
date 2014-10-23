@@ -142,8 +142,24 @@ object JsonSpec extends Specification {
       val t = 1330950829160L
       val m = Map("timestamp" -> t)
       val jsonM = toJson(m)
-      (jsonM \ "timestamp").as[Long] must equalTo(t)
-      (jsonM.toString must equalTo("{\"timestamp\":1330950829160}"))
+      (jsonM \ "timestamp").as[Long] must_== t
+      jsonM.toString must_== "{\"timestamp\":1330950829160}"
+    }
+
+    "Serialize short integers correctly" in {
+      val s: Short = 1234
+      val m = Map("s" -> s)
+      val jsonM = toJson(m)
+      (jsonM \ "s").as[Short] must_== s
+      jsonM.toString must_== "{\"s\":1234}"
+    }
+
+    "Serialize bytes correctly" in {
+      val b: Byte = 123
+      val m = Map("b" -> b)
+      val jsonM = toJson(m)
+      (jsonM \ "b").as[Byte] must_== b
+      jsonM.toString must_== "{\"b\":123}"
     }
 
     "Serialize and deserialize BigDecimals" in {
@@ -283,18 +299,19 @@ object JsonSpec extends Specification {
         (__ \ 'key4).write(constraints.map[String])
       ).tupled
 
-      Json.toJson(List(1, 2, 3),
+      Json.toJson((
+        List(1, 2, 3),
         Set("alpha", "beta", "gamma"),
         Seq("alpha", "beta", "gamma"),
         Map("key1" -> "value1", "key2" -> "value2")
-      ) must beEqualTo(
-          Json.obj(
-            "key1" -> Json.arr(1, 2, 3),
-            "key2" -> Json.arr("alpha", "beta", "gamma"),
-            "key3" -> Json.arr("alpha", "beta", "gamma"),
-            "key4" -> Json.obj("key1" -> "value1", "key2" -> "value2")
-          )
+      )) must beEqualTo(
+        Json.obj(
+          "key1" -> Json.arr(1, 2, 3),
+          "key2" -> Json.arr("alpha", "beta", "gamma"),
+          "key3" -> Json.arr("alpha", "beta", "gamma"),
+          "key4" -> Json.obj("key1" -> "value1", "key2" -> "value2")
         )
+      )
     }
 
     "write in 2nd level" in {

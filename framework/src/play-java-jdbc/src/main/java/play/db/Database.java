@@ -36,7 +36,6 @@ public abstract class Database {
      *
      * Don't forget to release the connection at some point by calling close().
      *
-     * @param autocommit determines whether to autocommit the connection
      * @return a JDBC connection
      */
     public abstract Connection getConnection();
@@ -69,12 +68,30 @@ public abstract class Database {
     public abstract <A> A withConnection(ConnectionCallable<A> block);
 
     /**
+     * Execute a block of code, providing a JDBC connection.
+     * The connection and all created statements are automatically released.
+     *
+     * @param autocommit determines whether to autocommit the connection
+     * @param block code to execute
+     */
+    public abstract void withConnection(boolean autocommit, ConnectionRunnable block);
+
+    /**
+     * Execute a block of code, providing a JDBC connection.
+     * The connection and all created statements are automatically released.
+     *
+     * @param autocommit determines whether to autocommit the connection
+     * @param block code to execute
+     * @return the result of the code block
+     */
+    public abstract <A> A withConnection(boolean autocommit, ConnectionCallable<A> block);
+
+    /**
      * Execute a block of code in the scope of a JDBC transaction.
      * The connection and all created statements are automatically released.
      * The transaction is automatically committed, unless an exception occurs.
      *
      * @param block code to execute
-     * @return the result of the code block
      */
     public abstract void withTransaction(ConnectionRunnable block);
 

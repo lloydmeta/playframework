@@ -3,6 +3,8 @@
  */
 package play.api.libs.ws
 
+import java.net.URI
+
 import scala.concurrent.{ Future, ExecutionContext }
 
 import java.io.File
@@ -342,9 +344,23 @@ case object EmptyBody extends WSBody
 trait WSRequestHolder {
 
   /**
-   * The URL for this request
+   * The base URL for this request
    */
   val url: String
+
+  /**
+   * The URI for this request
+   */
+  lazy val uri: URI = {
+    val enc = (p: String) => java.net.URLEncoder.encode(p, "utf-8")
+    new java.net.URI(if (queryString.isEmpty) url else {
+      val qs = (for {
+        (n, vs) <- queryString
+        v <- vs
+      } yield s"${enc(n)}=${enc(v)}").mkString("&")
+      s"$url?$qs"
+    })
+  }
 
   /**
    * The method for this request
@@ -427,7 +443,7 @@ trait WSRequestHolder {
   def withTimeout(timeout: Int) = withRequestTimeout(timeout)
 
   /**
-   * Sets the maximum time in millisecond you accept the request to take.
+   * Sets the maximum time in milliseconds you expect the request to take.
    * Warning: a stream consumption will be interrupted when this time is reached.
    */
   def withRequestTimeout(timeout: Int): WSRequestHolder

@@ -4,8 +4,10 @@
 package play.api.test
 
 import play.api._
+import play.api.http.{ GlobalSettingsHttpErrorHandler, HttpErrorHandler, DefaultHttpErrorHandler }
 import play.api.inject.guice.GuiceApplicationLoader
 import play.api.inject._
+import play.api.libs.{ Crypto, CryptoConfigParser, CryptoConfig }
 import play.api.mvc._
 import play.api.libs.json.JsValue
 import play.core.{ DefaultWebCommands, WebCommands }
@@ -199,15 +201,13 @@ object FakeRequest {
 
 import play.api.Application
 case class FakeApplication(
-  override val path: java.io.File = new java.io.File("."),
-  override val classloader: ClassLoader = classOf[FakeApplication].getClassLoader,
-  val additionalPlugins: Seq[String] = Nil,
-  val withoutPlugins: Seq[String] = Nil,
-  val additionalConfiguration: Map[String, _ <: Any] = Map.empty,
-  val withGlobal: Option[play.api.GlobalSettings] = None,
-  val withRoutes: PartialFunction[(String, String), Handler] = PartialFunction.empty) extends {
-  override val sources = None
-} with Application {
+    override val path: java.io.File = new java.io.File("."),
+    override val classloader: ClassLoader = classOf[FakeApplication].getClassLoader,
+    val additionalPlugins: Seq[String] = Nil,
+    val withoutPlugins: Seq[String] = Nil,
+    val additionalConfiguration: Map[String, _ <: Any] = Map.empty,
+    val withGlobal: Option[play.api.GlobalSettings] = None,
+    val withRoutes: PartialFunction[(String, String), Handler] = PartialFunction.empty) extends Application {
 
   private val environment = Environment(path, classloader, Mode.Test)
   private val initialConfiguration = Threads.withContextClassLoader(environment.classLoader) {
@@ -218,7 +218,7 @@ case class FakeApplication(
     global.onLoadConfig(initialConfiguration, path, classloader, environment.mode) ++
       play.api.Configuration.from(additionalConfiguration)
 
-  Logger.configure(path, configuration, environment.mode)
+  Logger.configure(environment, configuration)
 
   val applicationLifecycle = new DefaultApplicationLifecycle
 
@@ -245,6 +245,8 @@ case class FakeApplication(
 
   def stop() = applicationLifecycle.stop()
 
+  override val errorHandler = injector.instanceOf[HttpErrorHandler]
+
   override val plugins = {
     Plugins.loadPlugins(
       additionalPlugins ++ Plugins.loadPluginClassNames(environment).diff(withoutPlugins),
@@ -252,24 +254,26 @@ case class FakeApplication(
     )
   }
   lazy val routes: Router.Routes = {
-    val parentRoutes = Router.load(environment, configuration)
-    new Router.Routes() {
-      def documentation = parentRoutes.documentation
-      // Use withRoutes first, then delegate to the parentRoutes if no route is defined
-      val routes = new AbstractPartialFunction[RequestHeader, Handler] {
-        override def applyOrElse[A <: RequestHeader, B >: Handler](rh: A, default: A => B) =
-          withRoutes.applyOrElse((rh.method, rh.path), (_: (String, String)) => default(rh))
-        def isDefinedAt(rh: RequestHeader) = withRoutes.isDefinedAt((rh.method, rh.path))
-      } orElse new AbstractPartialFunction[RequestHeader, Handler] {
-        override def applyOrElse[A <: RequestHeader, B >: Handler](rh: A, default: A => B) =
-          parentRoutes.routes.applyOrElse(rh, default)
-        def isDefinedAt(x: RequestHeader) = parentRoutes.routes.isDefinedAt(x)
-      }
-      def setPrefix(prefix: String) {
-        parentRoutes.setPrefix(prefix)
-      }
-      def prefix = parentRoutes.prefix
-    }
+    val parentRoutes = injector.instanceOf[Router.Routes]
+    new FakeRoutes(errorHandler, withRoutes, parentRoutes)
+  }
+}
+
+private class FakeRoutes(override val errorHandler: HttpErrorHandler,
+    injected: PartialFunction[(String, String), Handler], fallback: Router.Routes) extends Router.Routes {
+  def documentation = fallback.documentation
+  // Use withRoutes first, then delegate to the parentRoutes if no route is defined
+  val routes = new AbstractPartialFunction[RequestHeader, Handler] {
+    override def applyOrElse[A <: RequestHeader, B >: Handler](rh: A, default: A => B) =
+      injected.applyOrElse((rh.method, rh.path), (_: (String, String)) => default(rh))
+    def isDefinedAt(rh: RequestHeader) = injected.isDefinedAt((rh.method, rh.path))
+  } orElse new AbstractPartialFunction[RequestHeader, Handler] {
+    override def applyOrElse[A <: RequestHeader, B >: Handler](rh: A, default: A => B) =
+      fallback.routes.applyOrElse(rh, default)
+    def isDefinedAt(x: RequestHeader) = fallback.routes.isDefinedAt(x)
+  }
+  def withPrefix(prefix: String) = {
+    new FakeRoutes(errorHandler, injected, fallback.withPrefix(prefix))
   }
 }
 
@@ -287,6 +291,9 @@ private class FakeBuiltinModule(environment: Environment,
     bind[ApplicationLifecycle] to appLifecycle,
     bind[WebCommands] to webCommands,
     bind[OptionalSourceMapper] to new OptionalSourceMapper(None),
-    bind[play.inject.Injector].to[play.inject.DelegateInjector]
-  )
+    bind[play.inject.Injector].to[play.inject.DelegateInjector],
+    bind[CryptoConfig].toProvider[CryptoConfigParser],
+    bind[Crypto].toSelf,
+    bind[Router.Routes].toProvider[RoutesProvider]
+  ) ++ HttpErrorHandler.bindingsFromConfiguration(environment, configuration)
 }

@@ -3,7 +3,8 @@
  */
 package play
 
-import play.sbtplugin.run.PlayWatchService
+import play.runsupport.PlayWatchService
+import play.sbtplugin.run._
 import sbt._
 import Keys._
 
@@ -117,6 +118,8 @@ object PlayImport {
     val confDirectory = SettingKey[File]("play-conf", "Where the Play conf directory lives")
 
     val ebeanEnabled = SettingKey[Boolean]("play-ebean-enabled")
+
+    val ebeanModels = SettingKey[String]("play-ebean-models")
 
     val playPlugin = SettingKey[Boolean]("play-plugin")
 

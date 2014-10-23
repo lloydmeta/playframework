@@ -109,6 +109,13 @@ trait DefaultWrites {
   }
 
   /**
+   * Serializer for Byte types.
+   */
+  implicit object ByteWrites extends Writes[Byte] {
+    def writes(o: Byte) = JsNumber(o)
+  }
+
+  /**
    * Serializer for Long types.
    */
   implicit object LongWrites extends Writes[Long] {
@@ -215,7 +222,8 @@ trait DefaultWrites {
    * @param pattern the pattern used by SimpleDateFormat
    */
   def jodaDateWrites(pattern: String): Writes[org.joda.time.DateTime] = new Writes[org.joda.time.DateTime] {
-    def writes(d: org.joda.time.DateTime): JsValue = JsString(d.toString(pattern))
+    val df = org.joda.time.format.DateTimeFormat.forPattern(pattern)
+    def writes(d: org.joda.time.DateTime): JsValue = JsString(d.toString(df))
   }
 
   /**
@@ -230,7 +238,8 @@ trait DefaultWrites {
    * @param pattern the pattern used by org.joda.time.format.DateTimeFormat
    */
   def jodaLocalDateWrites(pattern: String): Writes[org.joda.time.LocalDate] = new Writes[org.joda.time.LocalDate] {
-    def writes(d: org.joda.time.LocalDate): JsValue = JsString(d.toString(pattern))
+    val df = org.joda.time.format.DateTimeFormat.forPattern(pattern)
+    def writes(d: org.joda.time.LocalDate): JsValue = JsString(d.toString(df))
   }
 
   /**
@@ -238,6 +247,21 @@ trait DefaultWrites {
    */
   implicit object DefaultJodaLocalDateWrites extends Writes[org.joda.time.LocalDate] {
     def writes(d: org.joda.time.LocalDate): JsValue = JsString(d.toString)
+  }
+
+  /**
+   * Serializer for org.joda.time.LocalTime
+   * @param pattern the pattern used by org.joda.time.format.DateTimeFormat
+   */
+  def jodaLocalTimeWrites(pattern: String): Writes[org.joda.time.LocalTime] = new Writes[org.joda.time.LocalTime] {
+    def writes(d: org.joda.time.LocalTime): JsValue = JsString(d.toString(pattern))
+  }
+
+  /**
+   * Default Serializer org.joda.time.LocalDate -> JsString(ISO8601 format (HH:mm:ss.SSS))
+   */
+  implicit object DefaultJodaLocalTimeWrites extends Writes[org.joda.time.LocalTime] {
+    def writes(d: org.joda.time.LocalTime): JsValue = JsString(d.toString)
   }
 
   /**

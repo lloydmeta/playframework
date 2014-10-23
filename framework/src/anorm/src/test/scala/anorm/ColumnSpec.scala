@@ -534,23 +534,37 @@ object ColumnSpec
     val idArray = Array(java.util.UUID.randomUUID, java.util.UUID.randomUUID)
     "be parsed from raw array" in withQueryResult(
       rowList1(classOf[Array[_]]) :+ idArray) { implicit con =>
-
         SQL"SELECT ids".as(scalar[Array[java.util.UUID]].single).
           aka("parsed array") mustEqual idArray
       }
 
-    "not be parsed from SQL array with invalid component type" in {
-      withQueryResult(rowList1(classOf[SqlArray]) :+ acolyte.jdbc.
-        ImmutableArray.getInstance(classOf[java.sql.Date],
-          Array(new java.sql.Date(1l), new java.sql.Date(2l)))) {
+    val jset = {
+      val l = new java.util.TreeSet[String](); l.add("CD"); l.add("EF"); l
+    }
+    "be parsed from Java iterable" in withQueryResult(
+      rowList1(classOf[java.util.Collection[String]]) :+ jset) { implicit con =>
+        SQL"SELECT it".as(scalar[Array[String]].singleOpt).
+          aka("parsed iterable") must beSome.which(_ must_== Array("CD", "EF"))
+      }
+
+    "have convinience mapping function" in withQueryResult(
+      rowList1(classOf[SqlArray]).withLabels(1 -> "a") :+ sqlArray) {
         implicit con =>
 
-          SQL"SELECT a".as(scalar[Array[String]].single).
-            aka("parsing") must throwA[Exception](message =
-              "TypeDoesNotMatch\\(Cannot convert ImmutableArray")
+          SQL"SELECT a".as(SqlParser.array[String]("a").single).
+            aka("parsed array") mustEqual Array("aB", "Cd", "EF")
+      }
+
+    "not be parsed from array with invalid component type" in withQueryResult(
+      rowList1(classOf[SqlArray]) :+ acolyte.jdbc.ImmutableArray.getInstance(
+        classOf[java.sql.Date], Array(new java.sql.Date(1l),
+          new java.sql.Date(2l)))) { implicit con =>
+
+        SQL"SELECT a".as(scalar[Array[String]].single).
+          aka("parsing") must throwA[Exception](message =
+            "TypeDoesNotMatch\\(Cannot convert ImmutableArray")
 
       }
-    }
 
     "not be parsed from float" in withQueryResult(floatList :+ 2f) {
       implicit con =>
@@ -589,18 +603,32 @@ object ColumnSpec
           aka("parsed array") mustEqual idArray.toList
       }
 
-    "not be parsed from SQL array with invalid component type" in {
-      withQueryResult(
-        rowList1(classOf[SqlArray]) :+ acolyte.jdbc.ImmutableArray.getInstance(
-          classOf[java.sql.Date], Array(new java.sql.Date(1l),
-            new java.sql.Date(2l)))) { implicit con =>
-
-          SQL"SELECT a".as(scalar[List[String]].single).
-            aka("parsing") must throwA[Exception](message =
-              "TypeDoesNotMatch\\(Cannot convert ImmutableArray")
-
-        }
+    val jlist = {
+      val l = new java.util.ArrayList[String](); l.add("A"); l.add("B"); l
     }
+    "be parsed from Java iterable" in withQueryResult(
+      rowList1(classOf[java.lang.Iterable[String]]) :+ jlist) { implicit con =>
+        SQL"SELECT it".as(SqlParser.list[String](1).singleOpt).
+          aka("parsed iterable") must beSome.which(_ must_== List("A", "B"))
+      }
+
+    "have convinience mapping function" in withQueryResult(
+      rowList1(classOf[SqlArray]).withLabels(1 -> "a") :+ sqlArray) {
+        implicit con =>
+          SQL"SELECT a".as(SqlParser.list[String]("a").single).
+            aka("parsed array") mustEqual List("aB", "Cd", "EF")
+      }
+
+    "not be parsed from SQL array with invalid component type" in withQueryResult(
+      rowList1(classOf[SqlArray]) :+ acolyte.jdbc.ImmutableArray.getInstance(
+        classOf[java.sql.Date], Array(new java.sql.Date(1l),
+          new java.sql.Date(2l)))) { implicit con =>
+
+        SQL"SELECT a".as(scalar[List[String]].single).
+          aka("parsing") must throwA[Exception](message =
+            "TypeDoesNotMatch\\(Cannot convert ImmutableArray")
+
+      }
 
     "not be parsed from float" in withQueryResult(floatList :+ 2f) {
       implicit con =>

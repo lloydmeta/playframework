@@ -70,6 +70,8 @@ trait EvolutionsApi {
 @Singleton
 class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
 
+  import DefaultEvolutionsApi._
+
   /**
    * Create evolution scripts.
    *
@@ -137,8 +139,8 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
           case true => {
             Some((rs, Evolution(
               rs.getInt(1),
-              rs.getString(3),
-              rs.getString(4))))
+              Option(rs.getString(3)) getOrElse "",
+              Option(rs.getString(4)) getOrElse "")))
           }
         }
       }
@@ -223,7 +225,7 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
         if (!autocommit) {
           Play.logger.error(message)
 
-          connection.rollback();
+          connection.rollback()
 
           val humanScript = "# --- Rev:" + lastScript.evolution.revision + "," + (if (lastScript.isInstanceOf[UpScript]) "Ups" else "Downs") + " - " + lastScript.evolution.hash + "\n\n" + (if (lastScript.isInstanceOf[UpScript]) lastScript.evolution.sql_up else lastScript.evolution.sql_down);
 
@@ -248,17 +250,13 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
   private def checkEvolutionsState(db: String): Unit = {
     def createPlayEvolutionsTable()(implicit conn: Connection): Unit = {
       try {
-        execute(
-          """
-              create table play_evolutions (
-                  id int not null primary key, hash varchar(255) not null,
-                  applied_at timestamp not null,
-                  apply_script text,
-                  revert_script text,
-                  state varchar(255),
-                  last_problem text
-              )
-          """)
+        val createScript = dbApi.database(db).url match {
+          case SqlServerJdbcUrl() => CreatePlayEvolutionsSqlServerSql
+          case OracleJdbcUrl() => CreatePlayEvolutionsOracleSql
+          case _ => CreatePlayEvolutionsSql
+        }
+
+        execute(createScript)
       } catch {
         case NonFatal(ex) => Logger.warn("could not create play_evolutions table", ex)
       }
@@ -323,6 +321,51 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
   private def prepare(sql: String)(implicit c: Connection): PreparedStatement = {
     c.prepareStatement(sql)
   }
+}
+
+private object DefaultEvolutionsApi {
+  val SqlServerJdbcUrl = "^jdbc:sqlserver:.*".r
+  val OracleJdbcUrl = "^jdbc:oracle:.*".r
+
+  val CreatePlayEvolutionsSql =
+    """
+      create table play_evolutions (
+          id int not null primary key,
+          hash varchar(255) not null,
+          applied_at timestamp not null,
+          apply_script text,
+          revert_script text,
+          state varchar(255),
+          last_problem text
+      )
+    """
+
+  val CreatePlayEvolutionsSqlServerSql =
+    """
+      create table play_evolutions (
+          id int not null primary key,
+          hash varchar(255) not null,
+          applied_at datetime not null,
+          apply_script text,
+          revert_script text,
+          state varchar(255),
+          last_problem text
+      )
+    """
+
+  val CreatePlayEvolutionsOracleSql =
+    """
+      CREATE TABLE play_evolutions (
+          id Number(10,0) Not Null Enable,
+          hash VARCHAR2(255 Byte),
+          applied_at Timestamp Not Null,
+          apply_script clob,
+          revert_script clob,
+          state Varchar2(255),
+          last_problem clob,
+          CONSTRAINT play_evolutions_pk PRIMARY KEY (id)
+      )
+    """
 }
 
 /**

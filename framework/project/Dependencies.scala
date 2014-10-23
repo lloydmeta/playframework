@@ -26,7 +26,7 @@ object Dependencies {
 
   val h2database = "com.h2database" % "h2" % "1.3.175"
 
-  val acolyteVersion = "1.0.22"
+  val acolyteVersion = "1.0.28-1"
   val acolyte = "org.eu.acolyte" % "jdbc-driver" % acolyteVersion
 
   val jdbcDeps = Seq(
@@ -44,8 +44,8 @@ object Dependencies {
   )
 
   val jpaDeps = Seq(
-    "org.hibernate.javax.persistence" % "hibernate-jpa-2.0-api" % "1.0.1.Final",
-    "org.hibernate" % "hibernate-entitymanager" % "3.6.9.Final" % "test"
+    "org.hibernate.javax.persistence" % "hibernate-jpa-2.1-api" % "1.0.0.Final",
+    "org.hibernate" % "hibernate-entitymanager" % "4.3.6.Final" % "test"
   )
 
   val link = Seq(
@@ -96,7 +96,7 @@ object Dependencies {
 
   val runtime = Seq("slf4j-api", "jul-to-slf4j", "jcl-over-slf4j").map("org.slf4j" % _ % "1.7.6") ++
     Seq("logback-core", "logback-classic").map("ch.qos.logback" % _ % "1.1.1") ++
-    Seq("akka-actor", "akka-slf4j").map("com.typesafe.akka" %% _ % "2.3.3") ++
+    Seq("akka-actor", "akka-slf4j").map("com.typesafe.akka" %% _ % "2.3.5") ++
     jacksons ++
     Seq(
       "org.scala-stm" %% "scala-stm" % "0.7",
@@ -125,8 +125,12 @@ object Dependencies {
     javaTestDeps
 
   val netty = Seq(
-    "io.netty"           % "netty"                 % "3.9.2.Final",
+    "io.netty"           % "netty"                 % "3.9.3.Final",
     "com.typesafe.netty" % "netty-http-pipelining" % "1.1.2"
+  )
+
+  val akkaHttp = Seq(
+    "com.typesafe.akka" %% "akka-http-core-experimental" % "0.6"
   )
 
   val routersCompilerDependencies =  Seq(
@@ -139,6 +143,10 @@ object Dependencies {
       "scalaVersion" -> BuildSettings.buildScalaBinaryVersionForSbt
     )
   }
+
+ val runSupportDependencies = Seq(
+    "org.scala-sbt" % "io" % BuildSettings.buildSbtVersion
+  ) ++ specsBuild.map(_ % Test)
 
   val typesafeConfig = "com.typesafe" % "config" % "1.2.1"
 
@@ -173,7 +181,7 @@ object Dependencies {
   ) ++ javassist ++ specsBuild.map(_ % Test)
 
   val playDocsDependencies = Seq(
-    "com.typesafe.play" %% "play-doc" % "1.1.0",
+    "com.typesafe.play" %% "play-doc" % "1.2.0",
     "org.webjars" % "jquery"   % "2.1.0-2"    % "webjars",
     "org.webjars" % "prettify" % "4-Mar-2013" % "webjars"
   )
@@ -182,6 +190,10 @@ object Dependencies {
     "org.scala-stm" %% "scala-stm" % "0.7",
     typesafeConfig
   ) ++ specsBuild.map(_ % Test)
+
+  val streamsDependencies = Seq(
+    "org.reactivestreams" % "reactive-streams" % "0.4.0.M1"
+  ) ++ specsBuild.map(_ % "test")
 
   val jsonDependencies = Seq(
     jodatime,
@@ -225,7 +237,8 @@ object Dependencies {
     "com.jsuereth" %% "scala-arm" % "1.4",
     h2database % Test,
     "org.eu.acolyte" %% "jdbc-scala" % acolyteVersion % Test,
-    "joda-time" % "joda-time" % "2.3",
+    jodatime,
+    jodaConvert,
     "com.chuusai" % "shapeless" % "2.0.0" % Test cross CrossVersion.binaryMapped {
       case "2.10" => BuildSettings.buildScalaVersion
       case x => x
@@ -233,7 +246,7 @@ object Dependencies {
   )
 
   val playDocsSbtPluginDependencies = Seq(
-    "com.typesafe.play" %% "play-doc" % "1.1.0"
+    "com.typesafe.play" %% "play-doc" % "1.2.0"
   )
 
 }
