@@ -4,6 +4,9 @@ import java.io.{ ByteArrayInputStream, InputStream }
 import java.sql.{ Array => SqlArray }
 import javax.sql.rowset.serial.{ SerialBlob, SerialClob }
 import java.math.BigInteger
+import java.util.UUID
+
+import scala.util.Random
 
 import acolyte.jdbc.{ QueryResult, ImmutableArray }
 import acolyte.jdbc.RowLists.{
@@ -366,6 +369,13 @@ object ColumnSpec
           aka("parsed big decimal") must_== bd
       }
 
+    "be parsed from big integer" in withQueryResult(
+      rowList1(classOf[BigInteger]) :+ bi) { implicit con =>
+
+        SQL("SELECT bi").as(scalar[java.math.BigDecimal].single).
+          aka("parsed big decimal") must_== new java.math.BigDecimal(bi)
+      }
+
     "be parsed from double" in withQueryResult(doubleList :+ 1.35d) {
       implicit con =>
         SQL("SELECT d").as(scalar[java.math.BigDecimal].single).
@@ -391,6 +401,20 @@ object ColumnSpec
       implicit con =>
         SQL("SELECT i").as(scalar[java.math.BigDecimal].single).
           aka("parsed big decimal") must_== java.math.BigDecimal.valueOf(6)
+
+    }
+
+    "be parsed from short" in withQueryResult(shortList :+ 7.toShort) {
+      implicit con =>
+        SQL("SELECT s").as(scalar[java.math.BigDecimal].single).
+          aka("parsed big decimal") must_== java.math.BigDecimal.valueOf(7)
+
+    }
+
+    "be parsed from byte" in withQueryResult(byteList :+ 8.toByte) {
+      implicit con =>
+        SQL("SELECT s").as(scalar[java.math.BigDecimal].single).
+          aka("parsed big decimal") must_== java.math.BigDecimal.valueOf(8)
 
     }
   }
@@ -517,6 +541,33 @@ object ColumnSpec
       SQL("SELECT time").as(scalar[java.util.Date].single).
         aka("parsed date") must_== new java.util.Date(time)
 
+    }
+  }
+
+  "Column mapped as UUID" should {
+    val uuid = UUID.randomUUID
+    val uuidStr = uuid.toString
+
+    "be pased from a UUID" in withQueryResult(rowList1(classOf[UUID]) :+ uuid) { implicit con =>
+      SQL("SELECT uuid").as(scalar[UUID].single).
+        aka("parsed uuid") must_== uuid
+    }
+
+    "be parsed from a valid string" in withQueryResult(stringList :+ uuidStr) { implicit con =>
+      SQL("SELECT uuid").as(scalar[UUID].single).
+        aka("parsed uuid") must_== uuid
+    }
+
+    "not be parsed from an invalid string" in withQueryResult(stringList :+ Random.nextString(36)) { implicit con =>
+      SQL("SELECT uuid").as(scalar[UUID].single).
+        aka("parsed uuid") must throwA[Exception](message =
+          "TypeDoesNotMatch\\(Cannot convert.* to UUID")
+    }
+
+    "not be mapped from an unknown type" in withQueryResult(booleanList :+ false) { implicit con =>
+      SQL("SELECT uuid").as(scalar[UUID].single).
+        aka("parsed uuid") must throwA[Exception](message =
+          "TypeDoesNotMatch\\(Cannot convert.*Boolean to UUID")
     }
   }
 

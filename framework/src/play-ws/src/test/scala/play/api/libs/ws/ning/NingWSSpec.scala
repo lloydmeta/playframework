@@ -264,6 +264,14 @@ object NingWSSpec extends PlaySpecification with Mockito {
       }
     }
 
+    "get the body as bytes from the AHC response" in {
+      val ahcResponse: AHCResponse = mock[AHCResponse]
+      val bytes = Array[Byte](-87, -72, 96, -63, -32, 46, -117, -40, -128, -7, 61, 109, 80, 45, 44, 30)
+      ahcResponse.getResponseBodyAsBytes returns bytes
+      val response = NingWSResponse(ahcResponse)
+      response.bodyAsBytes must_== bytes
+    }
+
     "get headers from an AHC response in a case insensitive map" in {
       val ahcResponse: AHCResponse = mock[AHCResponse]
       val ahcHeaders = new FluentCaseInsensitiveStringsMap()
@@ -278,6 +286,20 @@ object NingWSSpec extends PlaySpecification with Mockito {
       headers.contains("Foo") must beTrue
       headers.contains("BAR") must beTrue
       headers.contains("Bar") must beTrue
+    }
+  }
+
+  "Ning WS Config" should {
+    "support overriding secure default values" in {
+      val ahcConfig = new NingAsyncHttpClientConfigBuilder().modifyUnderlying { builder =>
+        builder.setCompressionEnabled(true)
+        builder.setFollowRedirects(false)
+      }.build()
+      ahcConfig.isCompressionEnabled must beTrue
+      ahcConfig.isRedirectEnabled must beFalse
+      ahcConfig.getConnectionTimeoutInMs must_== Defaults.connectionTimeout
+      ahcConfig.getRequestTimeoutInMs must_== Defaults.requestTimeout
+      ahcConfig.getIdleConnectionTimeoutInMs must_== Defaults.idleTimeout
     }
   }
 

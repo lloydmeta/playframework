@@ -697,14 +697,14 @@ Following table describes which JDBC numeric types (getters on `java.sql.ResultS
 ↓JDBC / JVM➞           | BigDecimal<sup>1</sup> | BigInteger<sup>2</sup> | Boolean | Byte | Double | Float | Int | Long | Short
 ---------------------- | ---------------------- | ---------------------- | ------- | ---- | ------ | ----- | --- | ---- | -----
 BigDecimal<sup>1</sup> | Yes                    | Yes                    | No      | No   | Yes    | No    | Yes | Yes  | No
-BigInteger<sup>2</sup> | No                     | Yes                    | No      | No   | Yes    | Yes   | Yes | Yes  | No
+BigInteger<sup>2</sup> | Yes                    | Yes                    | No      | No   | Yes    | Yes   | Yes | Yes  | No
 Boolean                | No                     | No                     | Yes     | Yes  | No     | No    | Yes | Yes  | Yes
-Byte                   | No                     | No                     | No      | Yes  | Yes    | Yes   | No  | No   | Yes
+Byte                   | Yes                    | No                     | No      | Yes  | Yes    | Yes   | No  | No   | Yes
 Double                 | Yes                    | No                     | No      | No   | Yes    | No    | No  | No   | No
 Float                  | Yes                    | No                     | No      | No   | Yes    | Yes   | No  | No   | No
 Int                    | Yes                    | Yes                    | No      | No   | Yes    | Yes   | Yes | Yes  | No
 Long                   | Yes                    | Yes                    | No      | No   | No     | No    | Yes | Yes  | No
-Short                  | No                     | No                     | No      | Yes  | Yes    | Yes   | No  | No   | Yes
+Short                  | Yes                    | No                     | No      | Yes  | Yes    | Yes   | No  | No   | Yes
 
 - 1. Types `java.math.BigDecimal` and `scala.math.BigDecimal`.
 - 2. Types `java.math.BigInteger` and `scala.math.BigInt`.
@@ -718,7 +718,7 @@ Clob                 | No                   | Yes  | No   | No               | Y
 Date                 | No                   | No   | Yes  | No               | No     | No
 Iterable<sup>6</sup> | Yes                  | No   | Yes  | Yes              | No     | No
 Long                 | No                   | No   | Yes  | No               | No     | No
-String               | No                   | Yes  | No   | No               | Yes    | No
+String               | No                   | Yes  | No   | No               | Yes    | Yes
 UUID                 | No                   | No   | No   | No               | No     | Yes
 
 - 3. Array which type `T` of elements is supported.
@@ -804,7 +804,7 @@ import anorm.Column
 
 // Custom conversion from JDBC column to Boolean
 implicit def columnToBoolean: Column[Boolean] = 
-  Column.nonNull { (value, meta) =>
+  Column.nonNull1 { (value, meta) =>
     val MetaDataItem(qualified, nullable, clazz) = meta
     value match {
       case bool: Boolean => Right(bool) // Provided-default case

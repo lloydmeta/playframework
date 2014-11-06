@@ -40,6 +40,12 @@ object BuildSettings {
 
   val buildWithDoc = boolProp("generate.doc")
 
+  // Argument for setting size of permgen space or meta space for all forked processes
+  val maxMetaspace = {
+    val space = if (isJavaAtLeast("1.8")) "Metaspace" else "Perm"
+    s"-XX:Max${space}Size=384m"
+  }
+
   def propOr(name: String, value: String): String =
     (sys.props get name) orElse
       (sys.env get name) getOrElse
@@ -64,8 +70,6 @@ object BuildSettings {
       new SharedProjectScalaVersion(scalaVersion,CrossVersion.binaryScalaVersion(scalaVersion))
   }
 
-  lazy val PerformanceTest = config("pt") extend Test
-
   def playCommonSettings: Seq[Setting[_]] = Seq(
     organization := buildOrganization,
     version := buildVersion,
@@ -76,14 +80,14 @@ object BuildSettings {
     javacOptions ++= makeJavacOptions("1.6"),
     javacOptions in doc := Seq("-source", "1.6"),
     resolvers ++= ResolverSettings.playResolvers,
+    resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases", // specs2 depends on scalaz-stream
     fork in Test := true,
     testListeners in (Test,test) := Nil,
     javacOptions in Test := { if (isJavaAtLeast("1.8")) makeJavacOptions("1.8") else makeJavacOptions("1.6") },
     unmanagedSourceDirectories in Test ++= { if (isJavaAtLeast("1.8")) Seq((sourceDirectory in Test).value / "java8") else Nil },
+    javaOptions in Test += maxMetaspace,
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v"),
-    testOptions in Test += Tests.Filter(!_.endsWith("Benchmark")),
-    testOptions in PerformanceTest ~= (_.filterNot(_.isInstanceOf[Tests.Filter]) :+ Tests.Filter(_.endsWith("Benchmark"))),
-    parallelExecution in PerformanceTest := false
+    testOptions in Test += Tests.Filter(!_.endsWith("Benchmark"))
   )
 
   def makeJavacOptions(version: String) = Seq("-source", version, "-target", version, "-encoding", "UTF-8", "-Xlint:-options", "-J-Xmx512m")
@@ -96,8 +100,6 @@ object BuildSettings {
       mimaDefaultSettings ++ Seq(previousArtifact := Some(buildOrganization % Project.normalizeModuleID(name) % previousVersion))
     } else Nil
     Project(name, file("src/" + dir))
-      .configs(PerformanceTest)
-      .settings(inConfig(PerformanceTest)(Defaults.testTasks) : _*)
       .settings(playCommonSettings: _*)
       .settings(PublishSettings.nonCrossBuildPublishSettings: _*)
       .settings(bcSettings: _*)
@@ -122,8 +124,6 @@ object BuildSettings {
    */
   def PlayRuntimeProject(name: String, dir: String): Project = {
     Project(name, file("src/" + dir))
-      .configs(PerformanceTest)
-      .settings(inConfig(PerformanceTest)(Defaults.testTasks) : _*)
       .settings(playCommonSettings: _*)
       .settings(PublishSettings.publishSettings: _*)
       .settings(mimaDefaultSettings: _*)
@@ -135,6 +135,7 @@ object BuildSettings {
     previousArtifact := Some(buildOrganization %
       (Project.normalizeModuleID(name) + "_" + CrossVersion.binaryScalaVersion(buildScalaVersion)) % previousVersion),
     scalacOptions ++= Seq("-encoding", "UTF-8", "-Xlint", "-deprecation", "-unchecked", "-feature"),
+    projectID := withSourceUrl.value,
     Docs.apiDocsInclude := true
   )
 
@@ -173,6 +174,17 @@ object BuildSettings {
         // processes classpath while it's actually being run by SBT 0.12... if it forks you get serialVersionUID errors.
         fork in Test := false
       )
+  }
+
+  /**
+   * Add an extra source url property to the project module for aggregated documentation.
+   */
+  def withSourceUrl = Def.setting {
+    val baseUrl = "https://github.com/playframework/playframework"
+    val sourceTree = if (isSnapshot.value) sourceCodeBranch else version.value
+    val sourceDirectory = IO.relativize((baseDirectory in ThisBuild).value, baseDirectory.value).getOrElse("")
+    val sourceUrl = s"${baseUrl}/tree/${sourceTree}/framework/${sourceDirectory}"
+    projectID.value.extra("info.sourceUrl" -> sourceUrl)
   }
 
   /**
@@ -248,6 +260,11 @@ object PlayBuild extends Build {
     testBinaryCompatibility = true)
 
   lazy val PlayNettyUtilsProject = PlaySharedJavaProject("Play-Netty-Utils", "play-netty-utils")
+    .settings(javacOptions in (Compile,doc) ++= {
+      // References to the rest of Netty don't work in the code that
+      // we've excised. Disable Javadoc lint checking in Java 8+.
+      if (isJavaAtLeast("1.8")) Seq("-Xdoclint:none") else Seq()
+    })
 
   lazy val PlayProject = PlayRuntimeProject("Play", "play")
     .enablePlugins(SbtTwirl)
@@ -260,7 +277,8 @@ object PlayBuild extends Build {
       mappings in (Compile, packageSrc) <++= scalaTemplateSourceMappings,
       Docs.apiDocsIncludeManaged := true,
       parallelExecution in Test := false
-    ).dependsOn(
+    ).settings(Docs.playdocSettings: _*)
+     .dependsOn(
       BuildLinkProject,
       IterateesProject % "test->test;compile->compile",
       JsonProject,
@@ -285,8 +303,9 @@ object PlayBuild extends Build {
     .settings(scriptedSettings: _*)
     .settings(
       scriptedLaunchOpts ++= Seq(
-        "-XX:MaxPermSize=384M",
-        "-Dproject.version=" + version.value
+        maxMetaspace,
+        "-Dproject.version=" + version.value,
+        "-Dscala.version=" + buildScalaVersion
       )
     )
     .dependsOn(PlayServerProject, StreamsProject)
@@ -352,9 +371,10 @@ object PlayBuild extends Build {
       },
       scriptedLaunchOpts ++= Seq(
         "-Xmx768m",
-        "-XX:MaxPermSize=384M",
+        maxMetaspace,
         "-Dperformance.log=" + new File(baseDirectory.value, "target/sbt-repcomile-performance.properties"),
-        "-Dproject.version=" + version.value
+        "-Dproject.version=" + version.value,
+        "-Dscala.version=" + buildScalaVersion
       ),
       scriptedDependencies := {
         val () = publishLocal.value
@@ -400,7 +420,6 @@ object PlayBuild extends Build {
   lazy val PlayIntegrationTestProject = PlayRuntimeProject("Play-Integration-Test", "play-integration-test")
     .settings(
       parallelExecution in Test := false,
-      libraryDependencies ++= integrationTestDependencies,
       previousArtifact := None
     )
     .dependsOn(PlayProject % "test->test", PlayWsProject, PlayWsJavaProject, PlayTestProject)

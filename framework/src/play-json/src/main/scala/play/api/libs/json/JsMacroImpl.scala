@@ -59,7 +59,14 @@ object JsMacroImpl {
       c.abort(c.enclosingPosition, s"${typeToWrite} has no getters. Are you using the right class?")
     val getterMethodTerms = getterMethodSymbols.map(_.asTerm)
 
-    val (canBuildFrom, hasRec) = canBuildTree[A, Writes](c)(methodName = "write", reads = false, writes = true, typeToWrite = typeToWrite.typeSymbol, accessorSymbols = getterMethodSymbols)
+    val (canBuildFrom, hasRec) = canBuildTree[A, Writes](c)(
+      methodName = "write",
+      reads = false,
+      writes = true,
+      typeToWrite = typeToWrite.typeSymbol,
+      accessorSymbols = getterMethodSymbols.toSeq,
+      hasVarArgs = false,
+      unapplyReturnTypes = None)
 
     // Manually-built "unapply"
     val objectTerm = newTermName("o")
@@ -105,13 +112,16 @@ object JsMacroImpl {
 
     val unliftIdent = Select(functionalSyntaxPkg(c), newTermName("unlift"))
 
-    val unapply =
-      companionType.declaration(stringToTermName("unapply")) match {
-        case NoSymbol => c.abort(c.enclosingPosition, "No unapply function found")
-        case s => s.asMethod
-      }
+    val unapply = companionType.declaration(stringToTermName("unapply"))
+    val unapplySeq = companionType.declaration(stringToTermName("unapplySeq"))
+    val hasVarArgs = unapplySeq != NoSymbol
 
-    val unapplyReturnTypes: Option[List[Type]] = unapply.returnType match {
+    val effectiveUnapply = Seq(unapply, unapplySeq).filter(_ != NoSymbol).headOption match {
+      case None => c.abort(c.enclosingPosition, "No unapply or unapplySeq function found")
+      case Some(s) => s.asMethod
+    }
+
+    val unapplyReturnTypes: Option[List[Type]] = effectiveUnapply.returnType match {
       case TypeRef(_, _, Nil) => {
         c.abort(c.enclosingPosition, s"Unapply of ${companionSymbol} has no parameters. Are you using an empty case class?")
         None
@@ -140,6 +150,19 @@ object JsMacroImpl {
 
     // searches apply method corresponding to unapply
     val apply = applies.collectFirst {
+      case (apply: MethodSymbol) if hasVarArgs && {
+        val someApplyTypes = apply.paramss.headOption.map(_.map(_.asTerm.typeSignature))
+        val someInitApply = someApplyTypes.map(_.init)
+        val someApplyLast = someApplyTypes.map(_.last)
+        val someInitUnapply = unapplyReturnTypes.map(_.init)
+        val someUnapplyLast = unapplyReturnTypes.map(_.last)
+        val initsMatch = someInitApply == someInitUnapply
+        val lastMatch = (for {
+          lastApply <- someApplyLast
+          lastUnapply <- someUnapplyLast
+        } yield lastApply <:< lastUnapply).getOrElse(false)
+        initsMatch && lastMatch
+      } => apply
       case (apply: MethodSymbol) if (apply.paramss.headOption.map(_.map(_.asTerm.typeSignature)) == unapplyReturnTypes) => apply
     }
 
@@ -152,6 +175,14 @@ object JsMacroImpl {
 
     // builds the final M[A] using apply method
     //val applyMethod = Ident( companionSymbol )
+    val applyBody = {
+      val body = params.foldLeft(List[Tree]())((l, e) =>
+        l :+ Ident(newTermName(e.name.encoded))
+      )
+      if (hasVarArgs)
+        body.init :+ Typed(body.last, Ident(tpnme.WILDCARD_STAR))
+      else body
+    }
     val applyMethod =
       Function(
         params.foldLeft(List[ValDef]())((l, e) =>
@@ -159,20 +190,25 @@ object JsMacroImpl {
         ),
         Apply(
           Select(Ident(companionSymbol), newTermName("apply")),
-          params.foldLeft(List[Tree]())((l, e) =>
-            l :+ Ident(newTermName(e.name.encoded))
-          )
+          applyBody
         )
       )
 
     val unapplyMethod = Apply(
       unliftIdent,
       List(
-        Select(Ident(companionSymbol), unapply.name)
+        Select(Ident(companionSymbol), effectiveUnapply.name)
       )
     )
 
-    val (canBuildFrom, hasRec) = canBuildTree[A, M](c)(methodName, reads, writes, companioned, params)
+    val (canBuildFrom, hasRec) = canBuildTree[A, M](c)(
+      methodName = methodName,
+      reads = reads,
+      writes = writes,
+      typeToWrite = companioned,
+      accessorSymbols = params,
+      hasVarArgs = hasVarArgs,
+      unapplyReturnTypes = unapplyReturnTypes)
 
     // if case class has one single field, needs to use inmap instead of canbuild.apply
     val method = if (params.length > 1) "apply" else mapLikeMethod
@@ -186,11 +222,14 @@ object JsMacroImpl {
     c.Expr[M[A]](block)
   }
 
-  private def canBuildTree[A, M[_]](c: Context)(methodName: String,
+  private def canBuildTree[A, M[_]](c: Context)(
+    methodName: String,
     reads: Boolean,
     writes: Boolean,
     typeToWrite: c.universe.Symbol,
-    accessorSymbols: Iterable[c.universe.Symbol])(implicit atag: c.WeakTypeTag[A], matag: c.WeakTypeTag[M[A]]): (c.universe.Apply, Boolean) = {
+    accessorSymbols: Seq[c.universe.Symbol],
+    hasVarArgs: Boolean,
+    unapplyReturnTypes: Option[List[c.universe.Type]])(implicit atag: c.WeakTypeTag[A], matag: c.WeakTypeTag[M[A]]): (c.universe.Apply, Boolean) = {
 
     import c.universe._
 
@@ -207,9 +246,7 @@ object JsMacroImpl {
 
     final case class Implicit(paramName: Name, paramType: Type, neededImplicit: Tree, isRecursive: Boolean, tpe: Type)
 
-    val inferredImplicits = accessorSymbols.map { accessorSymbol =>
-
-      val implType = if (accessorSymbol.isMethod) accessorSymbol.asMethod.returnType else accessorSymbol.typeSignature
+    val createImplicit = { (name: Name, implType: c.universe.Type) =>
       val (isRecursive, tpe) = implType match {
         case TypeRef(_, t, args) =>
           val isRec = args.exists(_.typeSymbol == typeToWrite)
@@ -224,13 +261,21 @@ object JsMacroImpl {
       val neededImplicitType = appliedType(matag.tpe.typeConstructor, tpe :: Nil)
       // infers implicit
       val neededImplicit = c.inferImplicitValue(neededImplicitType)
-      Implicit(accessorSymbol.name, implType, neededImplicit, isRecursive, tpe)
+      Implicit(name, implType, neededImplicit, isRecursive, tpe)
     }
 
-    //println("Found implicits:"+inferredImplicits)
+    val applyParamImplicits = accessorSymbols.map { accessor =>
+      // For accesors that are methods (vals in the body), we only care about the return type
+      val implType = if (accessor.isMethod) accessor.asMethod.returnType else accessor.typeSignature
+      createImplicit(accessor.name, implType)
+    }
+    val effectiveInferredImplicits = if (hasVarArgs) {
+      val varArgsImplicit = createImplicit(applyParamImplicits.last.paramName, unapplyReturnTypes.get.last)
+      applyParamImplicits.init :+ varArgsImplicit
+    } else applyParamImplicits
 
     // if any implicit is missing, abort
-    val missingImplicits = inferredImplicits.collect { case Implicit(_, t, impl, rec, _) if (impl == EmptyTree && !rec) => t }
+    val missingImplicits = effectiveInferredImplicits.collect { case Implicit(_, t, impl, rec, _) if (impl == EmptyTree && !rec) => t }
     if (missingImplicits.nonEmpty)
       c.abort(c.enclosingPosition, s"No implicit format for ${missingImplicits.mkString(", ")} available.")
 
@@ -243,7 +288,7 @@ object JsMacroImpl {
     var hasRec = false
 
     // combines all reads into CanBuildX
-    val canBuild = inferredImplicits.map {
+    val canBuild = effectiveInferredImplicits.map {
       case Implicit(name, t, impl, rec, tpe) =>
         // inception of (__ \ name).read(impl)
         val jspathTree = Apply(

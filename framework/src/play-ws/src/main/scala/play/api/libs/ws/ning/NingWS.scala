@@ -35,7 +35,7 @@ import scala.collection.JavaConverters._
  *
  * @param config a client configuration object
  */
-class NingWSClient(config: AsyncHttpClientConfig) extends WSClient {
+case class NingWSClient(config: AsyncHttpClientConfig) extends WSClient {
 
   private val asyncHttpClient = new AsyncHttpClient(config)
 
@@ -512,15 +512,11 @@ case class NingWSRequestHolder(client: NingWSClient,
 
 class NingWSModule extends Module {
   def bindings(environment: Environment, configuration: Configuration) = {
-    if (configuration.underlying.getBoolean("play.modules.ws.enabled")) {
-      Seq(
-        bind[WSAPI].to[NingWSAPI],
-        bind[WSClientConfig].toProvider[DefaultWSConfigParser].in[Singleton],
-        bind[WSClient].toProvider[WSClientProvider].in[Singleton]
-      )
-    } else {
-      Nil
-    }
+    Seq(
+      bind[WSAPI].to[NingWSAPI],
+      bind[WSClientConfig].toProvider[DefaultWSConfigParser].in[Singleton],
+      bind[WSClient].toProvider[WSClientProvider].in[Singleton]
+    )
   }
 }
 
@@ -692,6 +688,11 @@ case class NingWSResponse(ahcResponse: AHCResponse) extends WSResponse {
    * The response body as Json.
    */
   lazy val json: JsValue = Json.parse(ahcResponse.getResponseBodyAsBytes)
+
+  /**
+   * The response body as a byte array.
+   */
+  def bodyAsBytes: Array[Byte] = ahcResponse.getResponseBodyAsBytes
 
 }
 

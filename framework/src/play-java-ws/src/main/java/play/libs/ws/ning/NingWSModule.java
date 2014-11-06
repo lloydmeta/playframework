@@ -13,21 +13,19 @@ import scala.collection.Seq;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
+import javax.inject.Singleton;
 
 public class NingWSModule extends Module {
 
     @Override
     public Seq<Binding<?>> bindings(Environment environment, Configuration configuration) {
-        if (configuration.underlying().getBoolean("play.modules.ws.enabled")) {
-            return seq(
-                    bind(WSAPI.class).to(NingWSAPI.class),
-                    bind(WSClient.class).toProvider(WSClientProvider.class)
-            );
-        } else {
-            return seq();
-        }
+        return seq(
+                bind(WSAPI.class).to(NingWSAPI.class),
+                bind(WSClient.class).toProvider(WSClientProvider.class)
+        );
     }
 
+    @Singleton
     public static class WSClientProvider implements Provider<WSClient> {
         private final WSAPI wsApi;
 
