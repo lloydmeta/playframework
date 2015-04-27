@@ -1,14 +1,17 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.mvc
 
+import java.nio.file.{ Files, Path }
+
+import org.joda.time.{ DateTime, DateTimeZone }
+import org.joda.time.format.{ DateTimeFormat, DateTimeFormatter }
+import play.api.i18n.{ MessagesApi, Lang }
 import play.api.libs.iteratee._
 import play.api.http._
 import play.api.http.HeaderNames._
 import play.api.http.HttpProtocol._
-import play.api.{ Application, Play }
-import play.api.i18n.{ MessagesApi, Lang }
 
 import play.core.Execution.Implicits._
 import play.api.libs.concurrent.Execution.defaultContext
@@ -18,27 +21,35 @@ import scala.collection.immutable.TreeMap
 /**
  * A simple HTTP response header, used for standard responses.
  *
- * @param status the response status, e.g. ‘200 OK’
+ * @param status the response status, e.g. 200
  * @param _headers the HTTP headers
+ * @param reasonPhrase the human-readable description of status, e.g. "Ok";
+ *   if None, the default phrase for the status will be used
  */
-final class ResponseHeader(val status: Int, _headers: Map[String, String] = Map.empty) {
+final class ResponseHeader(val status: Int, _headers: Map[String, String] = Map.empty, val reasonPhrase: Option[String] = None) {
   val headers: Map[String, String] = TreeMap[String, String]()(CaseInsensitiveOrdered) ++ _headers
 
-  def copy(status: Int = status, headers: Map[String, String] = headers): ResponseHeader =
-    new ResponseHeader(status, headers)
+  def copy(status: Int = status, headers: Map[String, String] = headers, reasonPhrase: Option[String] = reasonPhrase): ResponseHeader =
+    new ResponseHeader(status, headers, reasonPhrase)
 
   override def toString = s"$status, $headers"
   override def hashCode = (status, headers).hashCode
   override def equals(o: Any) = o match {
-    case ResponseHeader(s, h) => (s, h).equals((status, headers))
+    case ResponseHeader(s, h, r) => (s, h, r).equals((status, headers, reasonPhrase))
     case _ => false
   }
 }
 object ResponseHeader {
-  def apply(status: Int, headers: Map[String, String] = Map.empty): ResponseHeader =
+  val basicDateFormatPattern = "EEE, dd MMM yyyy HH:mm:ss"
+  val httpDateFormat: DateTimeFormatter =
+    DateTimeFormat.forPattern(basicDateFormatPattern + " 'GMT'")
+      .withLocale(java.util.Locale.ENGLISH)
+      .withZone(DateTimeZone.UTC)
+
+  def apply(status: Int, headers: Map[String, String] = Map.empty, reasonPhrase: Option[String] = None): ResponseHeader =
     new ResponseHeader(status, headers)
-  def unapply(rh: ResponseHeader): Option[(Int, Map[String, String])] =
-    if (rh eq null) None else Some((rh.status, rh.headers))
+  def unapply(rh: ResponseHeader): Option[(Int, Map[String, String], Option[String])] =
+    if (rh eq null) None else Some((rh.status, rh.headers, rh.reasonPhrase))
 }
 
 /**
@@ -101,7 +112,19 @@ case class Result(header: ResponseHeader, body: Enumerator[Array[Byte]],
   }
 
   /**
-   * Adds cookies to this result.
+   * Add a header with a DateTime formatted using the default http date format
+   * @param headers
+   * @return
+   */
+  def withDateHeaders(headers: (String, DateTime)*): Result = {
+    copy(header = header.copy(headers = header.headers ++ headers.map {
+      case (name, dateTime) => (name, ResponseHeader.httpDateFormat.print(dateTime.getMillis))
+    }))
+  }
+
+  /**
+   * Adds cookies to this result. If the result already contains
+   * cookies then the new cookies will be merged with the old cookies.
    *
    * For example:
    * {{{
@@ -112,7 +135,9 @@ case class Result(header: ResponseHeader, body: Enumerator[Array[Byte]],
    * @return the new result
    */
   def withCookies(cookies: Cookie*): Result = {
-    withHeaders(SET_COOKIE -> Cookies.merge(header.headers.get(SET_COOKIE).getOrElse(""), cookies))
+    if (cookies.isEmpty) this else {
+      withHeaders(SET_COOKIE -> Cookies.merge(header.headers.get(SET_COOKIE).getOrElse(""), cookies))
+    }
   }
 
   /**
@@ -248,34 +273,6 @@ case class Result(header: ResponseHeader, body: Enumerator[Array[Byte]],
   def removingFromSession(keys: String*)(implicit request: RequestHeader): Result =
     withSession(new Session(session.data -- keys))
 
-  /**
-   * Sets the user's language permanently for future requests by storing it in a cookie.
-   *
-   * For example:
-   * {{{
-   * implicit val lang = Lang("fr-FR")
-   * Ok(Messages("hello.world")).withLang(lang)
-   * }}}
-   *
-   * @param lang the language to store for the user
-   * @return the new result
-   */
-  def withLang(lang: Lang)(implicit app: Application): Result =
-    app.injector.instanceOf[MessagesApi].setLang(this, lang)
-
-  /**
-   * Clears the user's language by discarding the language cookie set by withLang
-   *
-   * For example:
-   * {{{
-   * Ok(Messages("hello.world")).clearingLang
-   * }}}
-   *
-   * @return the new result
-   */
-  def clearingLang(implicit app: Application): Result =
-    discardingCookies(DiscardingCookie(Play.langCookieName))
-
   override def toString = {
     "Result(" + header + ")"
   }
@@ -328,8 +325,49 @@ object Codec {
 
 }
 
+trait LegacyI18nSupport {
+
+  /**
+   * Adds convenient methods to handle the client-side language.
+   *
+   * This class exists only for backward compatibility.
+   */
+  implicit class ResultWithLang(result: Result)(implicit messagesApi: MessagesApi) {
+
+    /**
+     * Sets the user's language permanently for future requests by storing it in a cookie.
+     *
+     * For example:
+     * {{{
+     * implicit val lang = Lang("fr-FR")
+     * Ok(Messages("hello.world")).withLang(lang)
+     * }}}
+     *
+     * @param lang the language to store for the user
+     * @return the new result
+     */
+    def withLang(lang: Lang): Result =
+      messagesApi.setLang(result, lang)
+
+    /**
+     * Clears the user's language by discarding the language cookie set by withLang
+     *
+     * For example:
+     * {{{
+     * Ok(Messages("hello.world")).clearingLang
+     * }}}
+     *
+     * @return the new result
+     */
+    def clearingLang: Result =
+      messagesApi.clearLang(result)
+
+  }
+
+}
+
 /** Helper utilities to generate results. */
-object Results extends Results {
+object Results extends Results with LegacyI18nSupport {
 
   /** Empty result, i.e. nothing to send. */
   case class EmptyContent()
@@ -366,7 +404,7 @@ trait Results {
      *
      * @param content The file to send.
      * @param inline Use Content-Disposition inline or attachment.
-     * @param fileName function to retrieve the file name (only used for Content-Disposition attachment).
+     * @param fileName Function to retrieve the file name (only used for Content-Disposition attachment).
      */
     def sendFile(content: java.io.File, inline: Boolean = false, fileName: java.io.File => String = _.getName, onClose: () => Unit = () => ()): Result = {
       val name = fileName(content)
@@ -374,8 +412,46 @@ trait Results {
         ResponseHeader(status, Map(
           CONTENT_LENGTH -> content.length.toString,
           CONTENT_TYPE -> play.api.libs.MimeTypes.forFileName(name).getOrElse(play.api.http.ContentTypes.BINARY)
-        ) ++ (if (inline) Map.empty else Map(CONTENT_DISPOSITION -> s"""attachment; filename="$name""""))),
+        ) ++ (if (inline) Map.empty else Map(CONTENT_DISPOSITION -> ("attachment; filename=\"" + name + "\"")))),
         Enumerator.fromFile(content) &> Enumeratee.onIterateeDone(onClose)(defaultContext)
+      )
+    }
+
+    /**
+     * Send a file.
+     *
+     * @param content The file to send.
+     * @param inline Use Content-Disposition inline or attachment.
+     * @param fileName Function to retrieve the file name (only used for Content-Disposition attachment).
+     */
+    def sendPath(content: Path, inline: Boolean = false, fileName: Path => String = _.getFileName.toString, onClose: () => Unit = () => ()): Result = {
+      val name = fileName(content)
+      Result(
+        ResponseHeader(status, Map(
+          CONTENT_LENGTH -> Files.size(content).toString,
+          CONTENT_TYPE -> play.api.libs.MimeTypes.forFileName(name).getOrElse(play.api.http.ContentTypes.BINARY)
+        ) ++ (if (inline) Map.empty else Map(CONTENT_DISPOSITION -> ("attachment; filename=\"" + name + "\"")))),
+        Enumerator.fromPath(content) &> Enumeratee.onIterateeDone(onClose)(defaultContext)
+      )
+    }
+
+    /**
+     * Send the given resource from the given classloader.
+     *
+     * @param resource The path of the resource to load.
+     * @param classLoader The classloader to load it from, defaults to the classloader for this class.
+     * @param inline Whether it should be served as an inline file, or as an attachment.
+     */
+    def sendResource(resource: String, classLoader: ClassLoader = Results.getClass.getClassLoader,
+      inline: Boolean = true): Result = {
+      val stream = classLoader.getResourceAsStream(resource)
+      val fileName = resource.split('/').last
+      Result(
+        ResponseHeader(status, Map(
+          CONTENT_LENGTH -> stream.available().toString,
+          CONTENT_TYPE -> play.api.libs.MimeTypes.forFileName(fileName).getOrElse(ContentTypes.BINARY)
+        ) ++ (if (inline) Map.empty else Map(CONTENT_DISPOSITION -> ("attachment; filename=\"" + fileName + "\"")))),
+        Enumerator.fromStream(stream)(defaultContext)
       )
     }
 
@@ -502,9 +578,35 @@ trait Results {
   /**
    * Dechunks a chunked transfer encoding stream.
    *
-   * Chunks may span multiple elements in the stream.
+   * Chunk content may span multiple elements in the stream.
    */
   def dechunk: Enumeratee[Array[Byte], Array[Byte]] = {
+    dechunk0 ><>
+      Enumeratee.takeWhile[Either[Array[Byte], Seq[(String, String)]]](_.isLeft) ><>
+      Enumeratee.map {
+        case Left(data) => data
+        case Right(_) => Array.empty
+      }
+  }
+
+  /**
+   * Dechunks a chunked transfer encoding stream, returning any trailers in the
+   * last element. Chunks are `Left(bytes)` and the trailer is `Right(trailers)`.
+   *
+   * Chunk and trailer content may span multiple elements in the stream.
+   */
+  def dechunkWithTrailers: Enumeratee[Array[Byte], Either[Array[Byte], Seq[(String, String)]]] = {
+    type ChunkOrTrailer = Either[Array[Byte], Seq[(String, String)]]
+    dechunk0 ><> Enumeratee.mapFlatten[ChunkOrTrailer][ChunkOrTrailer] {
+      case l @ Left(_) => Enumerator(l)
+      case r @ Right(_) => Enumerator[ChunkOrTrailer](r) >>> Enumerator.eof[ChunkOrTrailer]
+    }
+  }
+
+  /**
+   * Helper used by both `dechunk` and `dechunkWithTrailers`.
+   */
+  private def dechunk0: Enumeratee[Array[Byte], Either[Array[Byte], Seq[(String, String)]]] = {
 
     // convenience method
     def elOrEmpty(data: Array[Byte]) = {
@@ -556,6 +658,7 @@ trait Results {
     } yield {
       trailer.split("""\s*:\s*""", 2) match {
         case Array(key, value) => (key -> value) :: trailers
+        case Array("") => trailers
         case Array(key) => (key -> "") :: trailers
       }
     }
@@ -570,12 +673,7 @@ trait Results {
       chunk <- if (size > 0) readChunk(size).map(Left.apply) else readLastChunk.map(Right.apply)
     } yield chunk
 
-    Enumeratee.grouped(chunkParser) ><>
-      Enumeratee.takeWhile[Either[Array[Byte], Seq[(String, String)]]](_.isLeft) ><>
-      Enumeratee.map {
-        case Left(data) => data
-        case Right(_) => Array.empty
-      }
+    Enumeratee.grouped(chunkParser)
   }
 
   /** Generates a ‘200 OK’ result. */
@@ -641,6 +739,9 @@ trait Results {
 
   /** Generates a ‘401 UNAUTHORIZED’ result. */
   val Unauthorized = new Status(UNAUTHORIZED)
+
+  /** Generates a ‘402 PAYMENT_REQUIRED’ result. */
+  val PaymentRequired = new Status(PAYMENT_REQUIRED)
 
   /** Generates a ‘403 FORBIDDEN’ result. */
   val Forbidden = new Status(FORBIDDEN)
@@ -731,7 +832,7 @@ trait Results {
    *
    * @param url the URL to redirect to
    * @param queryString queryString parameters to add to the queryString
-   * @param status HTTP status
+   * @param status HTTP status for redirect, such as SEE_OTHER, MOVED_TEMPORARILY or MOVED_PERMANENTLY
    */
   def Redirect(url: String, queryString: Map[String, Seq[String]] = Map.empty, status: Int = SEE_OTHER) = {
     import java.net.URLEncoder
@@ -749,5 +850,13 @@ trait Results {
    * @param call Call defining the URL to redirect to, which typically comes from the reverse router
    */
   def Redirect(call: Call): Result = Redirect(call.url)
+
+  /**
+   * Generates a redirect simple result.
+   *
+   * @param call Call defining the URL to redirect to, which typically comes from the reverse router
+   * @param status HTTP status for redirect, such as SEE_OTHER, MOVED_TEMPORARILY or MOVED_PERMANENTLY
+   */
+  def Redirect(call: Call, status: Int): Result = Redirect(call.url, Map.empty, status)
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.cache
 
@@ -59,9 +59,8 @@ trait CacheApi {
  */
 object Cache {
 
-  private def cacheApi(implicit app: Application): CacheApi = {
-    app.injector.instanceOf[CacheApi]
-  }
+  private val cacheApiCache = Application.instanceCache[CacheApi]
+  private[cache] def cacheApi(implicit app: Application) = cacheApiCache(app)
 
   private def intToDuration(seconds: Int): Duration = if (seconds == 0) Duration.Inf else seconds.seconds
 
@@ -165,8 +164,8 @@ class EhCacheModule extends Module {
   import scala.collection.JavaConversions._
 
   def bindings(environment: Environment, configuration: Configuration) = {
-    val defaultCacheName = configuration.underlying.getString("play.modules.cache.defaultCache")
-    val bindCaches = configuration.underlying.getStringList("play.modules.cache.bindCaches").toSeq
+    val defaultCacheName = configuration.underlying.getString("play.cache.defaultCache")
+    val bindCaches = configuration.underlying.getStringList("play.cache.bindCaches").toSeq
 
     // Creates a named cache qualifier
     def named(name: String): NamedCache = {
@@ -181,7 +180,8 @@ class EhCacheModule extends Module {
       Seq(
         ehcacheKey.to(new NamedEhCacheProvider(name)),
         cacheApiKey.to(new NamedCacheApiProvider(ehcacheKey)),
-        bind[JavaCacheApi].qualifiedWith(namedCache).to(new NamedJavaCacheApiProvider(cacheApiKey))
+        bind[JavaCacheApi].qualifiedWith(namedCache).to(new NamedJavaCacheApiProvider(cacheApiKey)),
+        bind[Cached].qualifiedWith(namedCache).to(new NamedCachedProvider(cacheApiKey))
       )
     }
 
@@ -197,7 +197,7 @@ class EhCacheModule extends Module {
 @Singleton
 class CacheManagerProvider @Inject() (env: Environment, config: Configuration, lifecycle: ApplicationLifecycle) extends Provider[CacheManager] {
   lazy val get: CacheManager = {
-    val resourceName = config.underlying.getString("play.modules.cache.configResource")
+    val resourceName = config.underlying.getString("play.cache.configResource")
     val configResource = env.resource(resourceName).getOrElse(env.classLoader.getResource("ehcache-default.xml"))
     val manager = CacheManager.create(configResource)
     lifecycle.addStopHook(() => Future.successful(manager.shutdown()))
@@ -227,6 +227,13 @@ private[play] class NamedJavaCacheApiProvider(key: BindingKey[CacheApi]) extends
   }
 }
 
+private[play] class NamedCachedProvider(key: BindingKey[CacheApi]) extends Provider[Cached] {
+  @Inject private var injector: Injector = _
+  lazy val get: Cached = {
+    new Cached(injector.instanceOf(key))
+  }
+}
+
 @Singleton
 class EhCacheApi @Inject() (cache: Ehcache) extends CacheApi {
 
@@ -250,6 +257,7 @@ class EhCacheApi @Inject() (cache: Ehcache) extends CacheApi {
   def get[T](key: String)(implicit ct: ClassTag[T]) = {
     Option(cache.get(key)).map(_.getObjectValue).collect {
       case tValue if ct.runtimeClass.isInstance(tValue) => tValue.asInstanceOf[T]
+      case tValue if ct == ClassTag.Nothing => tValue.asInstanceOf[T]
     }
   }
 

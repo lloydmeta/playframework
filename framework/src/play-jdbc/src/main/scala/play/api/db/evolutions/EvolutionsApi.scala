@@ -1,24 +1,25 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.db.evolutions
 
-import java.io.{ File, FileInputStream }
+import java.io.{ InputStream, FileInputStream }
 import java.sql.{ Connection, Date, PreparedStatement, ResultSet, SQLException }
 import javax.inject.{ Inject, Singleton }
 
 import scala.io.Codec
 import scala.util.control.NonFatal
 
-import play.api.db.DBApi
+import play.api.db.{ Database, DBApi }
 import play.api.libs.Collections
-import play.api.{ Environment, Logger, Mode, Play, PlayException }
+import play.api.{ Environment, Logger, PlayException }
 import play.utils.PlayIO
 
 /**
  * Evolutions API.
  */
 trait EvolutionsApi {
+
   /**
    * Create evolution scripts.
    *
@@ -38,13 +39,12 @@ trait EvolutionsApi {
   def scripts(db: String, reader: EvolutionsReader): Seq[Script]
 
   /**
-   * Create evolution scripts.
+   * Get all scripts necessary to reset the database state to its initial state.
    *
    * @param db the database name
-   * @param path application root path
    * @return evolution scripts
    */
-  def scripts(db: String, path: File): Seq[Script]
+  def resetScripts(db: String): Seq[Script]
 
   /**
    * Apply evolution scripts to the database.
@@ -70,63 +70,55 @@ trait EvolutionsApi {
 @Singleton
 class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
 
-  import DefaultEvolutionsApi._
+  private def databaseEvolutions(name: String) = new DatabaseEvolutions(dbApi.database(name))
 
-  /**
-   * Create evolution scripts.
-   *
-   * @param db the database name
-   * @param evolutions the evolutions for the application
-   * @return evolution scripts
-   */
-  def scripts(db: String, evolutions: Seq[Evolution]): Seq[Script] = {
+  def scripts(db: String, evolutions: Seq[Evolution]) = databaseEvolutions(db).scripts(evolutions)
+
+  def scripts(db: String, reader: EvolutionsReader) = databaseEvolutions(db).scripts(reader)
+
+  def resetScripts(db: String) = databaseEvolutions(db).resetScripts()
+
+  def evolve(db: String, scripts: Seq[Script], autocommit: Boolean) = databaseEvolutions(db).evolve(scripts, autocommit)
+
+  def resolve(db: String, revision: Int) = databaseEvolutions(db).resolve(revision)
+}
+
+/**
+ * Evolutions for a particular database.
+ */
+class DatabaseEvolutions(database: Database) {
+
+  import DefaultEvolutionsApi._
+  import DatabaseUrlPatterns._
+
+  def scripts(evolutions: Seq[Evolution]): Seq[Script] = {
     if (evolutions.nonEmpty) {
       val application = evolutions.reverse
-      val database = databaseEvolutions(db)
+      val database = databaseEvolutions()
 
       val (nonConflictingDowns, dRest) = database.span(e => !application.headOption.exists(e.revision <= _.revision))
       val (nonConflictingUps, uRest) = application.span(e => !database.headOption.exists(_.revision >= e.revision))
 
       val (conflictingDowns, conflictingUps) = Evolutions.conflictings(dRest, uRest)
 
-      val ups = (nonConflictingUps ++ conflictingUps).reverse.map(e => UpScript(e))
+      val ups = (nonConflictingUps ++ conflictingUps).reverseMap(e => UpScript(e))
       val downs = (nonConflictingDowns ++ conflictingDowns).map(e => DownScript(e))
 
       downs ++ ups
     } else Nil
   }
 
-  /**
-   * Create evolution scripts.
-   *
-   * @param db the database name
-   * @param reader evolution file reader
-   * @return evolution scripts
-   */
-  def scripts(db: String, reader: EvolutionsReader): Seq[Script] = {
-    scripts(db, reader.evolutions(db))
-  }
-
-  /**
-   * Create evolution scripts.
-   *
-   * @param db the database name
-   * @param path application root path
-   * @return evolution scripts
-   */
-  def scripts(db: String, path: File): Seq[Script] = {
-    scripts(db, new EvolutionsReader(Environment(path, this.getClass.getClassLoader, Mode.Dev /* not used */ )))
+  def scripts(reader: EvolutionsReader): Seq[Script] = {
+    scripts(reader.evolutions(database.name))
   }
 
   /**
    * Read evolutions from the database.
-   *
-   * @param db the database name
    */
-  def databaseEvolutions(db: String): Seq[Evolution] = {
-    implicit val connection = dbApi.database(db).getConnection(autocommit = true)
+  private def databaseEvolutions(): Seq[Evolution] = {
+    implicit val connection = database.getConnection(autocommit = true)
 
-    checkEvolutionsState(db)
+    checkEvolutionsState()
 
     try {
 
@@ -150,14 +142,7 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
     }
   }
 
-  /**
-   * Apply evolution scripts to the database.
-   *
-   * @param db the database name
-   * @param scripts the evolution scripts to run
-   * @param autocommit determines whether the connection uses autocommit
-   */
-  def evolve(db: String, scripts: Seq[Script], autocommit: Boolean): Unit = {
+  def evolve(scripts: Seq[Script], autocommit: Boolean): Unit = {
     def logBefore(script: Script)(implicit conn: Connection): Unit = {
       script match {
         case UpScript(e) => {
@@ -195,8 +180,8 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
       ps.execute()
     }
 
-    implicit val connection = dbApi.database(db).getConnection(autocommit = autocommit)
-    checkEvolutionsState(db)
+    implicit val connection = database.getConnection(autocommit = autocommit)
+    checkEvolutionsState()
 
     var applying = -1
     var lastScript: Script = null
@@ -213,7 +198,7 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
       }
 
       if (!autocommit) {
-        connection.commit();
+        connection.commit()
       }
 
     } catch {
@@ -223,13 +208,13 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
           case ex => ex.getMessage
         }
         if (!autocommit) {
-          Play.logger.error(message)
+          logger.error(message)
 
           connection.rollback()
 
-          val humanScript = "# --- Rev:" + lastScript.evolution.revision + "," + (if (lastScript.isInstanceOf[UpScript]) "Ups" else "Downs") + " - " + lastScript.evolution.hash + "\n\n" + (if (lastScript.isInstanceOf[UpScript]) lastScript.evolution.sql_up else lastScript.evolution.sql_down);
+          val humanScript = "# --- Rev:" + lastScript.evolution.revision + "," + (if (lastScript.isInstanceOf[UpScript]) "Ups" else "Downs") + " - " + lastScript.evolution.hash + "\n\n" + (if (lastScript.isInstanceOf[UpScript]) lastScript.evolution.sql_up else lastScript.evolution.sql_down)
 
-          throw InconsistentDatabase(db, humanScript, message, lastScript.evolution.revision)
+          throw InconsistentDatabase(database.name, humanScript, message, lastScript.evolution.revision)
         } else {
           updateLastProblem(message, applying)
         }
@@ -238,31 +223,31 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
       connection.close()
     }
 
-    checkEvolutionsState(db)
+    checkEvolutionsState()
   }
 
   /**
    * Checks the evolutions state in the database.
    *
-   * @param db the database name
-   * @throws an error if the database is in an inconsistent state
+   * @throws NonFatal error if the database is in an inconsistent state
    */
-  private def checkEvolutionsState(db: String): Unit = {
+  private def checkEvolutionsState(): Unit = {
     def createPlayEvolutionsTable()(implicit conn: Connection): Unit = {
       try {
-        val createScript = dbApi.database(db).url match {
+        val createScript = database.url match {
           case SqlServerJdbcUrl() => CreatePlayEvolutionsSqlServerSql
           case OracleJdbcUrl() => CreatePlayEvolutionsOracleSql
+          case MysqlJdbcUrl(_) => CreatePlayEvolutionsMySql
           case _ => CreatePlayEvolutionsSql
         }
 
         execute(createScript)
       } catch {
-        case NonFatal(ex) => Logger.warn("could not create play_evolutions table", ex)
+        case NonFatal(ex) => logger.warn("could not create play_evolutions table", ex)
       }
     }
 
-    implicit val connection = dbApi.database(db).getConnection(autocommit = true)
+    implicit val connection = database.getConnection(autocommit = true)
 
     try {
       val problem = executeQuery("select id, hash, apply_script, revert_script, state, last_problem from play_evolutions where state like 'applying_%'")
@@ -277,11 +262,11 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
         }
         val error = problem.getString("last_problem")
 
-        Play.logger.error(error)
+        logger.error(error)
 
-        val humanScript = "# --- Rev:" + revision + "," + (if (state == "applying_up") "Ups" else "Downs") + " - " + hash + "\n\n" + script;
+        val humanScript = "# --- Rev:" + revision + "," + (if (state == "applying_up") "Ups" else "Downs") + " - " + hash + "\n\n" + script
 
-        throw InconsistentDatabase(db, humanScript, error, revision)
+        throw InconsistentDatabase(database.name, humanScript, error, revision)
       }
 
     } catch {
@@ -292,16 +277,15 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
     }
   }
 
-  /**
-   * Resolve evolution conflicts.
-   *
-   * @param db the database name
-   * @param revision the revision to mark as resolved
-   */
-  def resolve(db: String, revision: Int): Unit = {
-    implicit val connection = dbApi.database(db).getConnection(autocommit = true)
+  def resetScripts(): Seq[Script] = {
+    val appliedEvolutions = databaseEvolutions()
+    appliedEvolutions.map(DownScript)
+  }
+
+  def resolve(revision: Int): Unit = {
+    implicit val connection = database.getConnection(autocommit = true)
     try {
-      execute("update play_evolutions set state = 'applied' where state = 'applying_up' and id = " + revision);
+      execute("update play_evolutions set state = 'applied' where state = 'applying_up' and id = " + revision)
       execute("delete from play_evolutions where state = 'applying_down' and id = " + revision);
     } finally {
       connection.close()
@@ -321,11 +305,12 @@ class DefaultEvolutionsApi @Inject() (dbApi: DBApi) extends EvolutionsApi {
   private def prepare(sql: String)(implicit c: Connection): PreparedStatement = {
     c.prepareStatement(sql)
   }
+
 }
 
 private object DefaultEvolutionsApi {
-  val SqlServerJdbcUrl = "^jdbc:sqlserver:.*".r
-  val OracleJdbcUrl = "^jdbc:oracle:.*".r
+
+  val logger = Logger(classOf[DefaultEvolutionsApi])
 
   val CreatePlayEvolutionsSql =
     """
@@ -366,18 +351,43 @@ private object DefaultEvolutionsApi {
           CONSTRAINT play_evolutions_pk PRIMARY KEY (id)
       )
     """
+
+  val CreatePlayEvolutionsMySql =
+    """
+      CREATE TABLE play_evolutions (
+          id int not null primary key,
+          hash varchar(255) not null,
+          applied_at timestamp not null,
+          apply_script mediumtext,
+          revert_script mediumtext,
+          state varchar(255),
+          last_problem mediumtext
+      )
+    """
 }
 
 /**
- * Read evolution files from the application environment.
+ * Reader for evolutions
  */
-@Singleton
-class EvolutionsReader @Inject() (environment: Environment) {
+trait EvolutionsReader {
   /**
-   * Read the application evolutions.
-   *
-   * @param db the database name
+   * Read the evolutions for the given db
    */
+  def evolutions(db: String): Seq[Evolution]
+}
+
+/**
+ * Evolutions reader that reads evolutions from resources, for example, the file system or the classpath
+ */
+abstract class ResourceEvolutionsReader extends EvolutionsReader {
+
+  /**
+   * Load the evolutions resource for the given database and revision.
+   *
+   * @return An InputStream to consume the resource, if such a resource exists.
+   */
+  def loadResource(db: String, revision: Int): Option[InputStream]
+
   def evolutions(db: String): Seq[Evolution] = {
 
     val upsMarker = """^#.*!Ups.*$""".r
@@ -400,9 +410,7 @@ class EvolutionsReader @Inject() (environment: Environment) {
     }
 
     Collections.unfoldLeft(1) { revision =>
-      environment.getExistingFile(Evolutions.fileName(db, revision)).map(new FileInputStream(_)).orElse {
-        environment.resourceAsStream(Evolutions.resourceName(db, revision))
-      }.map { stream =>
+      loadResource(db, revision).map { stream =>
         (revision + 1, (revision, PlayIO.readStreamAsString(stream)(Codec.UTF8)))
       }
     }.sortBy(_._1).map {
@@ -419,8 +427,8 @@ class EvolutionsReader @Inject() (environment: Environment) {
 
         Evolution(
           revision,
-          parsed.get(UPS).getOrElse(""),
-          parsed.get(DOWNS).getOrElse(""))
+          parsed.getOrElse(UPS, ""),
+          parsed.getOrElse(DOWNS, ""))
       }
     }
 
@@ -428,7 +436,76 @@ class EvolutionsReader @Inject() (environment: Environment) {
 }
 
 /**
- * Exception thrown when the database is in inconsistent state.
+ * Read evolution files from the application environment.
+ */
+@Singleton
+class EnvironmentEvolutionsReader @Inject() (environment: Environment) extends ResourceEvolutionsReader {
+
+  def loadResource(db: String, revision: Int) = {
+    environment.getExistingFile(Evolutions.fileName(db, revision)).map(new FileInputStream(_)).orElse {
+      environment.resourceAsStream(Evolutions.resourceName(db, revision))
+    }
+  }
+}
+
+/**
+ * Evolutions reader that reads evolution files from a class loader.
+ *
+ * @param classLoader The classloader to read from, defaults to the classloader for this class.
+ * @param prefix A prefix that gets added to the resource file names, for example, this could be used to namespace
+ *               evolutions in different environments to work with different databases.
+ */
+class ClassLoaderEvolutionsReader(classLoader: ClassLoader = classOf[ClassLoaderEvolutionsReader].getClassLoader,
+    prefix: String = "") extends ResourceEvolutionsReader {
+  def loadResource(db: String, revision: Int) = {
+    Option(classLoader.getResourceAsStream(prefix + Evolutions.resourceName(db, revision)))
+  }
+}
+
+/**
+ * Evolutions reader that reads evolution files from a class loader.
+ */
+object ClassLoaderEvolutionsReader {
+  /**
+   * Create a class loader evolutions reader for the given prefix.
+   */
+  def forPrefix(prefix: String) = new ClassLoaderEvolutionsReader(prefix = prefix)
+}
+
+/**
+ * Evolutions reader that reads evolution files from its own classloader.  Only suitable for simple (flat) classloading
+ * environments.
+ */
+object ThisClassLoaderEvolutionsReader extends ClassLoaderEvolutionsReader(classOf[ClassLoaderEvolutionsReader].getClassLoader)
+
+/**
+ * Simple map based implementation of the evolutions reader.
+ */
+class SimpleEvolutionsReader(evolutionsMap: Map[String, Seq[Evolution]]) extends EvolutionsReader {
+  def evolutions(db: String) = evolutionsMap.getOrElse(db, Nil)
+}
+
+/**
+ * Simple map based implementation of the evolutions reader.
+ */
+object SimpleEvolutionsReader {
+  /**
+   * Create a simple evolutions reader from the given data.
+   *
+   * @param data A map of database name to a sequence of evolutions.
+   */
+  def from(data: (String, Seq[Evolution])*) = new SimpleEvolutionsReader(data.toMap)
+
+  /**
+   * Create a simple evolutions reader from the given evolutions for the default database.
+   *
+   * @param evolutions The evolutions.
+   */
+  def forDefault(evolutions: Evolution*) = new SimpleEvolutionsReader(Map("default" -> evolutions))
+}
+
+/**
+ * Exception thrown when the database is in an inconsistent state.
  *
  * @param db the database name
  * @param script the evolution script

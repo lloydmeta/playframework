@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Action composition
 
 This chapter introduces several ways to define generic action functionality.
@@ -39,13 +39,13 @@ You can also mark action composition with your own annotation, which must itself
 
 @[verbose-annotation](code/javaguide/http/JavaActionsComposition.java)
 
-You can then use your new annotation with an action method:
-
-@[verbose-annotation-index](code/javaguide/http/JavaActionsComposition.java)
-
 Your `Action` definition retrieves the annotation as configuration:
 
 @[verbose-annotation-action](code/javaguide/http/JavaActionsComposition.java)
+
+You can then use your new annotation with an action method:
+
+@[verbose-annotation-index](code/javaguide/http/JavaActionsComposition.java)
 
 ## Annotating controllers
 
@@ -64,4 +64,8 @@ public class Admin extends Controller {
 
 You can pass an object from an action to a controller by utilizing the context args map.
 
-@[security-action](code/javaguide/http/JavaActionsComposition.java)
+@[pass-arg-action](code/javaguide/http/JavaActionsComposition.java)
+
+Then in an action you can get the arg like this:
+
+@[pass-arg-action-index](code/javaguide/http/JavaActionsComposition.java)

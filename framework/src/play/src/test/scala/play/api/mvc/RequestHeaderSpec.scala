@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.mvc
 
@@ -41,9 +41,9 @@ class RequestHeaderSpec extends Specification {
     }
   }
 
-  def accept(value: String) = DummyRequestHeader(Map("Accept-Language" -> Seq(value))).acceptLanguages
+  def accept(value: String) = DummyRequestHeader(Headers("Accept-Language" -> value)).acceptLanguages
 
-  case class DummyRequestHeader(headersMap: Map[String, Seq[String]] = Map()) extends RequestHeader {
+  case class DummyRequestHeader(headers: Headers = Headers()) extends RequestHeader {
     def id = 1
     def tags = Map()
     def uri = ""
@@ -53,6 +53,5 @@ class RequestHeaderSpec extends Specification {
     def queryString = Map()
     def remoteAddress = ""
     def secure = false
-    lazy val headers = new Headers { val data = headersMap.toSeq }
   }
 }

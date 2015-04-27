@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.db.evolutions
 
@@ -9,11 +9,11 @@ import play.api.{ Environment, Mode }
 
 object EvolutionsReaderSpec extends Specification {
 
-  "EvolutionsReader" should {
+  "EnvironmentEvolutionsReader" should {
 
     "read evolution files from classpath" in {
       val environment = Environment(new File("."), getClass.getClassLoader, Mode.Test)
-      val reader = new EvolutionsReader(environment)
+      val reader = new EnvironmentEvolutionsReader(environment)
 
       reader.evolutions("test") must_== Seq(
         Evolution(1, "create table test (id bigint not null, name varchar(255));", "drop table if exists test;"),

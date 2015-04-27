@@ -1,9 +1,10 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs
 
 import org.apache.commons.lang3.StringEscapeUtils
+import play.api.libs.json.Json
 import play.api.mvc._
 import play.api.libs.iteratee._
 import play.twirl.api._
@@ -39,7 +40,7 @@ object Comet {
     /**
      * Json messages.
      */
-    implicit val jsonMessages = CometMessage[play.api.libs.json.JsValue](json => json.toString())
+    implicit val jsonMessages = CometMessage[play.api.libs.json.JsValue](Json.stringify)
 
   }
 

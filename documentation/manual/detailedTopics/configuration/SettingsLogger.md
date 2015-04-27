@@ -1,70 +1,24 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Configuring logging
 
 Play uses [Logback](http://logback.qos.ch/) as its logging engine, see the [Logback documentation](http://logback.qos.ch/manual/configuration.html) for details on configuration.
 
 ## Default configuration
+
 Play uses the following default configuration in production:
 
-```xml
-<configuration>
-    
-  <conversionRule conversionWord="coloredLevel" converterClass="play.api.Logger$ColoredLevel" />
-  
-  <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-     <file>${application.home}/logs/application.log</file>
-     <encoder>
-       <pattern>%date [%level] from %logger in %thread - %message%n%xException</pattern>
-     </encoder>
-   </appender>
+@[](/confs/play/logback-play-default.xml)
 
-  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-    <encoder>
-      <pattern>%coloredLevel %logger{15} - %message%n%xException{10}</pattern>
-    </encoder>
-  </appender>
-  
-  <logger name="play" level="INFO" />
-  <logger name="application" level="DEBUG" />
-  
-  <!-- Off these ones as they are annoying, and anyway we manage configuration ourself -->
-  <logger name="com.avaje.ebean.config.PropertyMapLoader" level="OFF" />
-  <logger name="com.avaje.ebeaninternal.server.core.XmlConfigLoader" level="OFF" />
-  <logger name="com.avaje.ebeaninternal.server.lib.BackgroundThread" level="OFF" />
-  <logger name="com.gargoylesoftware.htmlunit.javascript" level="OFF" />
+A few things to note about this configuration:
 
-  <root level="WARN">
-    <appender-ref ref="STDOUT" />
-    <appender-ref ref="FILE" />
-  </root>
-  
-</configuration>
-```
-
-This specifies a file appender writing to `logs/application.log`, a console appender, and log levels for the root/play/application loggers.
-
-## Configuring log levels in application.conf
-You can override log levels in application.conf as follows:
-
-```properties
-# Root logger:
-logger.root=ERROR
-
-# Logger used by the framework:
-logger.play=INFO
-
-# Logger provided to your application:
-logger.application=DEBUG
-
-# Logger for a third party library
-logger.org.springframework=INFO
-```
+* This specifies a file appender that writes to `logs/application.log`.
+* The file logger logs full exception stack traces, while the console logger only logs 10 lines of an exception stack trace.
+* Play uses ANSI color codes by default in level messages.
+* Play puts both the console and the file logger behind the logback [AsyncAppender](http://logback.qos.ch/manual/appenders.html#AsyncAppender).  For details on the performance implications on this, see this [blog post](http://blog.takipi.com/how-to-instantly-improve-your-java-logging-with-7-logback-tweaks/).
 
 ## Custom configuration
 
-For any custom configuration beyond log levels, you will need to specify your own Logback configuration file.
-
-> Note: Log level configuration in `application.conf` will also override custom configuration. It is best to remove these properties when using a Logback configuration file to avoid confusion.
+For any custom configuration, you will need to specify your own Logback configuration file.
 
 ### Using a configuration file from project source
 
@@ -94,7 +48,7 @@ $ start -Dlogger.file=/opt/prod/logger.xml
 
 ### Examples
 
-Here's an example of configuration that would work well in a production environment:
+Here's an example of configuration that uses a rolling file appender, as well as a seperate appender for outputting an access log:
 
 ```xml
 <configuration>
@@ -148,6 +102,7 @@ This demonstrates a few useful features:
 - All loggers are set to a threshold of `INFO` which is a common choice for production logging.  
 
 ## Akka logging configuration
+
 Akka has its own logging system which may or may not use Play's underlying logging engine depending on how it is configured.
 
 By default, Akka will ignore Play's logging configuration and print log messages to STDOUT using its own format. You can configure the log level in `application.conf`:
@@ -181,4 +136,6 @@ Next, refine your Akka logging settings in your Logback configuration:
 <logger name="actors.MyActor" level="DEBUG" />
 ```
 
-You may also wish to configure an appender for the Akka loggers that includes useful properties such as thread and actor address. See the logging page in the [Akka documentation](http://akka.io/docs/) for details on Logback configuration and other useful information.
+You may also wish to configure an appender for the Akka loggers that includes useful properties such as thread and actor address.
+
+For more information about configuring Akka's logging, including details on Logback and Slf4j integration, see the [Akka documentation](http://doc.akka.io/docs/akka/current/scala/logging.html).

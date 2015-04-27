@@ -1,7 +1,10 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package scalaguide.forms.scalaforms {
+
+import play.api.{Environment, Configuration}
+import play.api.i18n.{DefaultLangs, DefaultMessagesApi, Messages}
 
 import scalaguide.forms.scalaforms.controllers.routes
 
@@ -23,6 +26,9 @@ import play.api.data.validation.Constraints._
 
 @RunWith(classOf[JUnitRunner])
 class ScalaFormsSpec extends Specification with Controller {
+
+  val conf = Configuration.reference
+  implicit val messages: Messages = new DefaultMessagesApi(Environment.simple(), conf, new DefaultLangs(conf)).preferred(Seq.empty)
 
   "A scala forms" should {
 
@@ -155,6 +161,8 @@ package controllers {
 
 import views.html._
 import views.html.contact._
+import play.api.i18n.Messages.Implicits._
+import play.api.Play.current
 
 class Application extends Controller {
 

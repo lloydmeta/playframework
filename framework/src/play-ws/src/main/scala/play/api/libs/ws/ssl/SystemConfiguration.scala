@@ -1,12 +1,12 @@
 /*
  *
- *  * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ *  * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  *
  */
 package play.api.libs.ws.ssl
 
 import play.api.libs.ws.WSClientConfig
-import java.security.{ Security, PrivilegedExceptionAction }
+import java.security.Security
 
 /**
  * Configures global system properties on the JSSE implementation, if defined.
@@ -22,15 +22,9 @@ class SystemConfiguration {
 
   def configure(config: WSClientConfig) {
 
-    config.ssl.map {
-      ssl =>
-        ssl.loose.map {
-          loose =>
-            loose.allowUnsafeRenegotiation.map(configureUnsafeRenegotiation)
-            loose.allowLegacyHelloMessages.map(configureAllowLegacyHelloMessages)
-        }
-        ssl.checkRevocation.map(configureCheckRevocation)
-    }
+    config.ssl.loose.allowUnsafeRenegotiation.map(configureUnsafeRenegotiation)
+    config.ssl.loose.allowLegacyHelloMessages.map(configureAllowLegacyHelloMessages)
+    config.ssl.checkRevocation.map(configureCheckRevocation)
   }
 
   def configureUnsafeRenegotiation(allowUnsafeRenegotiation: Boolean) {
@@ -44,7 +38,7 @@ class SystemConfiguration {
   }
 
   def configureCheckRevocation(checkRevocation: Boolean) {
-    // http://docs.oracle.com/javase/6/docs/technotes/guides/security/certpath/CertPathProgGuide.html#AppC
+    // http://docs.oracle.com/javase/8/docs/technotes/guides/security/certpath/CertPathProgGuide.html#AppC
     // https://blogs.oracle.com/xuelei/entry/enable_ocsp_checking
 
     // 1.7: PXIXCertPathValidator.populateVariables, it is dynamic so no override needed.

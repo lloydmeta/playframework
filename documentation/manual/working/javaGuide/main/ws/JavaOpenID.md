@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # OpenID Support in Play
 
 OpenID is a protocol for users to access several services with a single account. As a web developer, you can use OpenID to offer users a way to log in using an account they already have, such as their [Google account](https://developers.google.com/accounts/docs/OpenID). In the enterprise, you may be able to use OpenID to connect to a company’s SSO server.
@@ -41,18 +41,14 @@ If the `Promise` fails, you can define a fallback, which redirects back the user
 
 controller:
 
-Java
-: @[ws-openid-controller](code/javaguide/ws/controllers/OpenIDController.java)
-
-Java 8
-: @[ws-openid-controller](java8code/java8guide/ws/controllers/OpenIDController.java)
+@[ws-openid-controller](code/javaguide/ws/controllers/OpenIDController.java)
 
 
 ## Extended Attributes
 
 The OpenID of a user gives you his identity. The protocol also supports getting [extended attributes](http://openid.net/specs/openid-attribute-exchange-1_0.html) such as the e-mail address, the first name, or the last name.
 
-You may request *optional* attributes and/or *required* attributes from the OpenID server. Asking for required attributes means the user cannot login to your service if he doesn’t provides them.
+You may request *optional* attributes and/or *required* attributes from the OpenID server. Asking for required attributes means the user cannot login to your service if he doesn’t provide them.
 
 Extended attributes are requested in the redirect URL:
 

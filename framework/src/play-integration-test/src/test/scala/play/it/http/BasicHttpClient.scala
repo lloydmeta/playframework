@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http
 
@@ -134,6 +134,9 @@ class BasicHttpClient(port: Int) {
     try {
       // Read status line
       val statusLine = reader.readLine()
+      if (statusLine == null) {
+        throw new RuntimeException(s"No response $responseDesc: EOF reached")
+      }
       val (version, status, reasonPhrase) = statusLine.split(" ", 3) match {
         case Array(v, s, r) => (v, s.toInt, r)
         case Array(v, s) => (v, s.toInt, "")

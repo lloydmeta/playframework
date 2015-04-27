@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.core.server.netty
 
@@ -7,7 +7,6 @@ import org.jboss.netty.buffer.ChannelBuffers
 import org.jboss.netty.channel._
 import org.jboss.netty.handler.codec.http._
 import org.jboss.netty.handler.codec.http.HttpHeaders._
-import org.jboss.netty.handler.codec.http.HttpHeaders.Names._
 import org.jboss.netty.handler.codec.http.websocketx.{ WebSocketFrame, TextWebSocketFrame, BinaryWebSocketFrame }
 import org.jboss.netty.handler.codec.frame.TooLongFrameException
 import org.jboss.netty.handler.ssl._
@@ -16,45 +15,54 @@ import org.jboss.netty.channel.group._
 import play.api._
 import play.api.http.{ HttpErrorHandler, DefaultHttpErrorHandler }
 import play.api.mvc._
-import play.api.http.HeaderNames.{ X_FORWARDED_FOR, X_FORWARDED_PROTO }
 import play.api.libs.iteratee._
 import play.api.libs.iteratee.Input._
 import play.core.server.Server
+import play.core.server.common.{ ForwardedHeaderHandler, ServerRequestUtils, ServerResultUtils }
+import play.core.system.RequestIdProvider
 import play.core.websocket._
 import scala.collection.JavaConverters._
 import scala.util.control.Exception
 import com.typesafe.netty.http.pipelining.{ OrderedDownstreamChannelEvent, OrderedUpstreamMessageEvent }
 import scala.concurrent.Future
-import java.net.URI
+import java.net.{ InetSocketAddress, URI }
 import java.io.IOException
 import org.jboss.netty.handler.codec.http.websocketx.CloseWebSocketFrame
 
 private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: DefaultChannelGroup) extends SimpleChannelUpstreamHandler with WebSocketHandler with RequestBodyHandler {
 
-  private val requestIDs = new java.util.concurrent.atomic.AtomicLong(0)
+  import PlayDefaultUpstreamHandler._
+
+  private lazy val forwardedHeaderHandler = new ForwardedHeaderHandler(
+    ForwardedHeaderHandler.ForwardedHeaderHandlerConfig(server.applicationProvider.get.toOption.map(_.configuration)))
 
   /**
-   * We don't know what the consequence of changing logging exceptions from trace to error will be.  We hope that it
-   * won't have any impact, but in case it turns out that there are many exceptions that are normal occurrences, we
-   * want to give people the opportunity to turn it off.
+   * Sends a simple response with no body, then closes the connection.
    */
-  val nettyExceptionLogger = Logger("play.nettyException")
+  private def sendSimpleErrorResponse(ctx: ChannelHandlerContext, status: HttpResponseStatus): Unit = {
+    val response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status)
+    response.headers().set(Names.CONNECTION, "close")
+    response.headers().set(Names.CONTENT_LENGTH, "0")
+    ctx.getChannel.write(response).addListener(ChannelFutureListener.CLOSE)
+  }
 
-  override def exceptionCaught(ctx: ChannelHandlerContext, event: ExceptionEvent) {
+  override def exceptionCaught(ctx: ChannelHandlerContext, event: ExceptionEvent): Unit = {
 
     event.getCause match {
       // IO exceptions happen all the time, it usually just means that the client has closed the connection before fully
       // sending/receiving the response.
       case e: IOException =>
-        nettyExceptionLogger.trace("Benign IO exception caught in Netty", e)
+        logger.trace("Benign IO exception caught in Netty", e)
         event.getChannel.close()
       case e: TooLongFrameException =>
-        nettyExceptionLogger.warn("Handling TooLongFrameException", e)
-        val response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.REQUEST_URI_TOO_LONG)
-        response.headers().set(Names.CONNECTION, "close")
-        ctx.getChannel.write(response).addListener(ChannelFutureListener.CLOSE)
+        logger.warn("Handling TooLongFrameException", e)
+        sendSimpleErrorResponse(ctx, HttpResponseStatus.REQUEST_URI_TOO_LONG)
+      case e: IllegalArgumentException if Option(e.getMessage).exists(_.contains("Header value contains a prohibited character")) =>
+        // https://github.com/netty/netty/blob/netty-3.9.3.Final/src/main/java/org/jboss/netty/handler/codec/http/HttpHeaders.java#L1075-L1080
+        logger.debug("Handling Header value error", e)
+        sendSimpleErrorResponse(ctx, HttpResponseStatus.BAD_REQUEST)
       case e =>
-        nettyExceptionLogger.error("Exception caught in Netty", e)
+        logger.error("Exception caught in Netty", e)
         event.getChannel.close()
     }
 
@@ -75,49 +83,36 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
 
       case nettyHttpRequest: HttpRequest =>
 
-        Play.logger.trace("Http request received by netty: " + nettyHttpRequest)
-        val keepAlive = isKeepAlive(nettyHttpRequest)
+        logger.trace("Http request received by netty: " + nettyHttpRequest)
         val websocketableRequest = websocketable(nettyHttpRequest)
         var nettyVersion = nettyHttpRequest.getProtocolVersion
         val nettyUri = new QueryStringDecoder(nettyHttpRequest.getUri)
-        val rHeaders = getHeaders(nettyHttpRequest)
+        val rHeaders: Headers = getHeaders(nettyHttpRequest)
 
-        def rRemoteAddress = e.getRemoteAddress match {
-          case ra: java.net.InetSocketAddress =>
-            val remoteAddress = ra.getAddress.getHostAddress
-            forwardedHeader(remoteAddress, X_FORWARDED_FOR).getOrElse(remoteAddress)
-        }
-
-        def rSecure = e.getRemoteAddress match {
-          case ra: java.net.InetSocketAddress =>
-            val remoteAddress = ra.getAddress.getHostAddress
-            val fh = forwardedHeader(remoteAddress, X_FORWARDED_PROTO)
-            fh.map(_ == "https").getOrElse(ctx.getPipeline.get(classOf[SslHandler]) != null)
-        }
-
-        /**
-         * Gets the value of a header, if the remote address is localhost or
-         * if the trustxforwarded configuration property is true
-         */
-        def forwardedHeader(remoteAddress: String, headerName: String) = for {
-          headerValue <- rHeaders.get(headerName)
-          app <- server.applicationProvider.get.toOption
-          trustxforwarded <- app.configuration.getBoolean("trustxforwarded").orElse(Some(false))
-          if remoteAddress == "127.0.0.1" || trustxforwarded
-        } yield headerValue
+        def rRemoteAddress = ServerRequestUtils.findRemoteAddress(
+          forwardedHeaderHandler,
+          rHeaders,
+          connectionRemoteAddress = e.getRemoteAddress.asInstanceOf[InetSocketAddress])
+        def rSecure = ServerRequestUtils.findSecureProtocol(
+          forwardedHeaderHandler,
+          rHeaders,
+          connectionSecureProtocol = ctx.getPipeline.get(classOf[SslHandler]) != null
+        )
 
         def tryToCreateRequest = {
           val parameters = Map.empty[String, Seq[String]] ++ nettyUri.getParameters.asScala.mapValues(_.asScala)
-          createRequestHeader(parameters)
+          // wrapping into URI to handle absoluteURI
+          val path = new URI(nettyUri.getPath).getRawPath
+          createRequestHeader(path, parameters)
         }
 
-        def createRequestHeader(parameters: Map[String, Seq[String]] = Map.empty[String, Seq[String]]) = {
+        def createRequestHeader(parsedPath: String, parameters: Map[String, Seq[String]] = Map.empty[String, Seq[String]]) = {
           //mapping netty request to Play's
           val untaggedRequestHeader = new RequestHeader {
-            val id = requestIDs.incrementAndGet
+            val id = RequestIdProvider.requestIDs.incrementAndGet
             val tags = Map.empty[String, String]
             def uri = nettyHttpRequest.getUri
-            def path = new URI(nettyUri.getPath).getRawPath //wrapping into URI to handle absoluteURI
+            def path = parsedPath
             def method = nettyHttpRequest.getMethod.getName
             def version = nettyVersion.getText
             def queryString = parameters
@@ -130,14 +125,10 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
         }
 
         val (requestHeader, handler: Either[Future[Result], (Handler, Application)] @unchecked) = Exception
-          .allCatch[RequestHeader].either {
-            val rh = tryToCreateRequest
-            // Force parsing of uri
-            rh.path
-            rh
-          }.fold(
+          .allCatch[RequestHeader].either(tryToCreateRequest).fold(
             e => {
-              val rh = createRequestHeader()
+              // use unparsed path
+              val rh = createRequestHeader(nettyUri.getPath)
               val result = Future
                 .successful(()) // Create a dummy future
                 .flatMap { _ =>
@@ -157,24 +148,6 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
         implicit val msgCtx = ctx
         implicit val oue = e.asInstanceOf[OrderedUpstreamMessageEvent]
 
-        def cleanFlashCookie(result: Result): Result = {
-          val header = result.header
-
-          val flashCookie = {
-            header.headers.get(SET_COOKIE)
-              .map(Cookies.decode(_))
-              .flatMap(_.find(_.name == Flash.COOKIE_NAME)).orElse {
-                Option(requestHeader.flash).filterNot(_.isEmpty).map { _ =>
-                  Flash.discard.toCookie
-                }
-              }
-          }
-
-          flashCookie.map { newCookie =>
-            result.withHeaders(SET_COOKIE -> Cookies.merge(header.headers.get(SET_COOKIE).getOrElse(""), Seq(newCookie)))
-          }.getOrElse(result)
-        }
-
         handler match {
           //execute normal action
           case Right((action: EssentialAction, app)) =>
@@ -190,7 +163,7 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
             handleAction(a, Some(app))
 
           case Right((ws @ WebSocket(f), app)) if websocketableRequest.check =>
-            Play.logger.trace("Serving this request with: " + ws)
+            logger.trace("Serving this request with: " + ws)
 
             val executed = Future(f(requestHeader))(play.api.libs.concurrent.Execution.defaultContext)
 
@@ -215,12 +188,12 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
 
           //handle bad websocket request
           case Right((WebSocket(_), app)) =>
-            Play.logger.trace("Bad websocket request")
+            logger.trace("Bad websocket request")
             val a = EssentialAction(_ => Done(Results.BadRequest, Input.Empty))
             handleAction(a, Some(app))
 
           case Left(e) =>
-            Play.logger.trace("No handler, got direct result: " + e)
+            logger.trace("No handler, got direct result: " + e)
             import play.api.libs.iteratee.Execution.Implicits.trampoline
             val a = EssentialAction(_ => Iteratee.flatten(e.map(result => Done(result, Input.Empty))))
             handleAction(a, None)
@@ -228,7 +201,7 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
         }
 
         def handleAction(action: EssentialAction, app: Option[Application]) {
-          Play.logger.trace("Serving this request with: " + action)
+          logger.trace("Serving this request with: " + action)
 
           val bodyParser = Iteratee.flatten(
             scala.concurrent.Future(action(requestHeader))(play.api.libs.concurrent.Execution.defaultContext)
@@ -296,18 +269,19 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
 
           val sent = eventuallyResultWithSequence.recoverWith {
             case error =>
-              Play.logger.error("Cannot invoke the action, eventually got an error: " + error)
+              logger.error("Cannot invoke the action, eventually got an error: " + error)
               e.getChannel.setReadable(true)
               errorHandler(app).onServerError(requestHeader, error)
                 .map((_, 0))
           }.flatMap {
             case (result, sequence) =>
-              NettyResultStreamer.sendResult(cleanFlashCookie(result), !keepAlive, nettyVersion, sequence)
+              val cleanedResult = ServerResultUtils.cleanFlashCookie(requestHeader, result)
+              NettyResultStreamer.sendResult(requestHeader, cleanedResult, nettyVersion, sequence)
           }
 
         }
 
-      case unexpected => Play.logger.error("Oops, unexpected message received in NettyServer (please report this problem): " + unexpected)
+      case unexpected => logger.error("Oops, unexpected message received in NettyServer (please report this problem): " + unexpected)
 
     }
   }
@@ -344,8 +318,8 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
   }
 
   def getHeaders(nettyRequest: HttpRequest): Headers = {
-    val pairs = nettyRequest.headers().entries().asScala.groupBy(_.getKey).mapValues(_.map(_.getValue))
-    new Headers { val data = pairs.toSeq }
+    val pairs = nettyRequest.headers().entries().asScala.map(h => h.getKey -> h.getValue)
+    new Headers(pairs)
   }
 
   def sendDownstream(subSequence: Int, last: Boolean, message: Object)(implicit ctx: ChannelHandlerContext, oue: OrderedUpstreamMessageEvent) = {
@@ -353,4 +327,8 @@ private[play] class PlayDefaultUpstreamHandler(server: Server, allChannels: Defa
     ctx.sendDownstream(ode)
     ode.getFuture
   }
+}
+
+object PlayDefaultUpstreamHandler {
+  private val logger = Logger(classOf[PlayDefaultUpstreamHandler])
 }

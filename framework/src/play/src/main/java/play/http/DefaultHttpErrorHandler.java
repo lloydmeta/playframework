@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.http;
 
@@ -7,8 +7,9 @@ import play.*;
 import play.api.OptionalSourceMapper;
 import play.api.UsefulException;
 import play.api.http.HttpErrorHandlerExceptions;
-import play.core.Router;
+import play.api.routing.Router;
 import play.libs.F;
+import play.mvc.Http;
 import play.mvc.Http.*;
 import play.mvc.Result;
 import play.mvc.Results;
@@ -27,11 +28,11 @@ public class DefaultHttpErrorHandler implements HttpErrorHandler {
     private final Option<String> playEditor;
     private final Environment environment;
     private final OptionalSourceMapper sourceMapper;
-    private final Provider<Router.Routes> routes;
+    private final Provider<Router> routes;
 
     @Inject
     public DefaultHttpErrorHandler(Configuration configuration, Environment environment,
-                                   OptionalSourceMapper sourceMapper, Provider<Router.Routes> routes) {
+                                   OptionalSourceMapper sourceMapper, Provider<Router> routes) {
         this.environment = environment;
         this.sourceMapper = sourceMapper;
         this.routes = routes;
@@ -56,7 +57,7 @@ public class DefaultHttpErrorHandler implements HttpErrorHandler {
             return onNotFound(request, message);
         } else if (statusCode >= 400 && statusCode < 500) {
             return F.Promise.<Result>pure(Results.status(statusCode, views.html.defaultpages.badRequest.render(
-                Context.current()._requestHeader(), message
+                request.method(), request.uri(), message
             )));
         } else {
             throw new IllegalArgumentException("onClientError invoked with non client error status code " + statusCode + ": " + message);
@@ -71,7 +72,7 @@ public class DefaultHttpErrorHandler implements HttpErrorHandler {
      */
     protected F.Promise<Result> onBadRequest(RequestHeader request, String message) {
         return F.Promise.<Result>pure(Results.badRequest(views.html.defaultpages.badRequest.render(
-                Context.current()._requestHeader(), message
+                request.method(), request.uri(), message
         )));
     }
 
@@ -94,10 +95,10 @@ public class DefaultHttpErrorHandler implements HttpErrorHandler {
     protected F.Promise<Result> onNotFound(RequestHeader request, String message){
         if (environment.isProd()) {
             return F.Promise.<Result>pure(Results.notFound(views.html.defaultpages.notFound.render(
-                    Context.current()._requestHeader())));
+                    request.method(), request.uri())));
         } else {
             return F.Promise.<Result>pure(Results.notFound(views.html.defaultpages.devNotFound.render(
-                    Context.current()._requestHeader(), Some.apply(routes.get())
+                    request.method(), request.uri(), Some.apply(routes.get())
             )));
         }
     }
@@ -117,10 +118,7 @@ public class DefaultHttpErrorHandler implements HttpErrorHandler {
         try {
             UsefulException usefulException = throwableToUsefulException(exception);
 
-            Logger.error(String.format("\n\n! @%s - Internal server error, for (%s) [%s] ->\n",
-                            usefulException.id, request.method(), request.uri()),
-                usefulException
-            );
+            logServerError(request, usefulException);
 
             switch (environment.mode()) {
                 case PROD:
@@ -132,6 +130,21 @@ public class DefaultHttpErrorHandler implements HttpErrorHandler {
             Logger.error("Error while handling error", e);
             return F.Promise.<Result>pure(Results.internalServerError());
         }
+    }
+
+    /**
+     * Responsible for logging server errors.
+     *
+     * This can be overridden to add additional logging information, eg. the id of the authenticated user.
+     *
+     * @param request The request that triggered the server error.
+     * @param usefulException The server error.
+     */
+    protected void logServerError(RequestHeader request, UsefulException usefulException) {
+        Logger.error(String.format("\n\n! @%s - Internal server error, for (%s) [%s] ->\n",
+                        usefulException.id, request.method(), request.uri()),
+                usefulException
+        );
     }
 
     /**

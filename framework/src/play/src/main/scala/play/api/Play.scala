@@ -1,8 +1,9 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api
 
+import play.api.i18n.MessagesApi
 import play.utils.Threads
 
 import java.io._
@@ -31,10 +32,7 @@ object Mode extends Enumeration {
  */
 object Play {
 
-  /*
-   * A general purpose logger for Play. Intended for internal usage.
-   */
-  private[play] val logger = Logger("play")
+  private val logger = Logger(Play.getClass)
 
   /*
    * We want control over the sax parser used so we specify the factory required explicitly. We know that
@@ -193,7 +191,7 @@ object Play {
   /**
    * Returns the current application router.
    */
-  def routes(implicit app: Application): play.core.Router.Routes = app.routes
+  def routes(implicit app: Application): play.api.routing.Router = app.routes
 
   /**
    * Returns the current application global settings.
@@ -223,12 +221,18 @@ object Play {
   /**
    * Returns the name of the cookie that can be used to permanently set the user's language.
    */
-  def langCookieName(implicit app: Application): String = {
-    app.configuration.getString("play.modules.i18n.langCookieName").orElse {
-      app.configuration.getString("application.lang.cookie").map { name =>
-        Logger.warn("application.lang.cookie is deprecated, use play.modules.i18n.langCookieName instead")
-        name
-      }
-    }.getOrElse("PLAY_LANG")
-  }
+  def langCookieName(implicit messagesApi: MessagesApi): String =
+    messagesApi.langCookieName
+
+  /**
+   * Returns whether the language cookie should have the secure flag set.
+   */
+  def langCookieSecure(implicit messagesApi: MessagesApi): Boolean =
+    messagesApi.langCookieSecure
+
+  /**
+   * Returns whether the language cookie should have the HTTP only flag set.
+   */
+  def langCookieHttpOnly(implicit messagesApi: MessagesApi): Boolean =
+    messagesApi.langCookieHttpOnly
 }

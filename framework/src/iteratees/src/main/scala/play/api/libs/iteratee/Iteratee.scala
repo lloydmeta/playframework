@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.iteratee
 
@@ -143,6 +143,47 @@ object Iteratee {
    * Consume all the chunks from the stream, and return a list.
    */
   def getChunks[E]: Iteratee[E, List[E]] = fold[E, List[E]](Nil) { (els, chunk) => chunk +: els }(dec).map(_.reverse)(dec)
+
+  /**
+   * Read up to n chunks from the stream stopping when that number of chunks have
+   * been read or the stream end is reached. If the stream has fewer elements then
+   * only those elements are returned. Will consume intermediate Input.Empty elements
+   * but does not consume Input.EOF.
+   */
+  def takeUpTo[E](n: Int): Iteratee[E, Seq[E]] = {
+    def stepWith(accum: Seq[E]): Iteratee[E, Seq[E]] = {
+      if (accum.length >= n) Done(accum) else Cont {
+        case Input.EOF =>
+          Done(accum, Input.EOF)
+        case Input.Empty =>
+          stepWith(accum)
+        case Input.El(el) =>
+          stepWith(accum :+ el)
+      }
+    }
+    stepWith(Seq.empty)
+  }
+
+  /**
+   * Determines whether or not a stream contains any elements. A stream can be
+   * empty if it has no inputs (except Input.EOF) or if it consists of only Input.Empty
+   * elements (and Input.EOF.) A stream is non-empty if it contains an Input.El.
+   *
+   * This iteratee consumes the stream as far as the first EOF or Input.El, skipping
+   * over any Input.Empty elements. When it encounters an Input.EOF or Input.El it
+   * is Done.
+   *
+   * Will consume intermediate Input.Empty elements but does not consume Input.El or
+   * Input.EOF.
+   */
+  def isEmpty[E]: Iteratee[E, Boolean] = Cont {
+    case Input.EOF =>
+      Done(true, Input.EOF)
+    case Input.Empty =>
+      isEmpty[E]
+    case input @ Input.El(_) =>
+      Done(false, input)
+  }
 
   /**
    * Ignore all the input of the stream, and return done when EOF is encountered.
@@ -500,7 +541,7 @@ trait Iteratee[E, +A] {
       }(dec)
       case Step.Cont(k) => {
         implicit val pec = ec.prepare()
-        Cont((in: Input[E]) => k(in).flatMap(f)(pec))
+        Cont((in: Input[E]) => executeIteratee(k(in))(dec).flatMap(f)(pec))
       }
       case Step.Error(msg, e) => Error(msg, e)
     }
@@ -597,29 +638,24 @@ trait Iteratee[E, +A] {
    * @return
    */
   def recoverWith[B >: A](pf: PartialFunction[Throwable, Iteratee[E, B]])(implicit ec: ExecutionContext): Iteratee[E, B] = {
-    val pec = ec.prepare()
+    implicit val pec = ec.prepare()
 
-    def step(it: Iteratee[E, A])(input: Input[E]): Iteratee[E, B] = {
-      val nextIt = it.pureFlatFold[E, B] {
+    def recoveringIteratee(it: Iteratee[E, A]): Iteratee[E, B] = {
+      val futureRecoveringIteratee: Future[Iteratee[E, B]] = it.pureFlatFold[E, B] {
         case Step.Cont(k) =>
-          val n = k(input)
-          n.pureFlatFold {
-            case Step.Cont(_) => Cont(step(n))
-            case Step.Error(msg, _) => throw new IterateeExeption(msg)
-            case other => other.it
-          }(dec)
-        case Step.Error(msg, _) => throw new IterateeExeption(msg)
-        case other => other.it
-      }(dec)
-
-      Iteratee.flatten(
-        nextIt.unflatten
-          .map(_.it)(dec)
-          .recover(pf)(pec)
-      )
+          Cont { input: Input[E] =>
+            val orig: Iteratee[E, A] = k(input)
+            val recovering: Iteratee[E, B] = recoveringIteratee(orig)
+            recovering
+          }
+        case Step.Error(msg, _) =>
+          throw new IterateeException(msg)
+        case done => done.it
+      }(dec).unflatten.map(_.it)(dec).recover(pf)(pec)
+      Iteratee.flatten(futureRecoveringIteratee)
     }
 
-    Cont(step(this))
+    recoveringIteratee(this)
   }
 
   def joinI[AIn](implicit in: A <:< Iteratee[_, AIn]): Iteratee[E, AIn] = {
@@ -764,6 +800,14 @@ object Error {
 
 /**
  * An Exception that represents an Iteratee that ended up in an Error state with the given
+ * error message. This exception will eventually be removed and replaced with
+ * `IterateeException` (notice the extra `c`).
+ */
+@deprecated("Use IterateeException instead (notice the extra 'c')", "2.4.0")
+class IterateeExeption(msg: String) extends Exception(msg)
+
+/**
+ * An Exception that represents an Iteratee that ended up in an Error state with the given
  * error message.
  */
-class IterateeExeption(msg: String) extends Exception(msg)
+class IterateeException(msg: String) extends IterateeExeption(msg)

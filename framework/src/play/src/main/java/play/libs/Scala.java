@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.libs;
 
@@ -47,6 +47,13 @@ public class Scala {
         return play.utils.Conversions.newMap(
                 scala.collection.JavaConverters.mapAsScalaMapConverter(javaMap).asScala().toSeq()
                 );
+    }
+
+    /**
+     * Converts a Java Collection to a Scala Seq.
+     */
+    public static <A> scala.collection.immutable.Seq<A> asScala(Collection<A> javaCollection) {
+        return scala.collection.JavaConverters.collectionAsScalaIterableConverter(javaCollection).asScala().toList();
     }
 
     /**
@@ -108,7 +115,7 @@ public class Scala {
      * None
      */
     public static <T> scala.Option<T> None() {
-        return scala.Option.apply(null);
+        return (scala.Option<T>) scala.None$.MODULE$;
     }
 
     /**

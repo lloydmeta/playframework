@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it
 
@@ -8,7 +8,6 @@ import ch.qos.logback.core.AppenderBase
 import ch.qos.logback.classic.spi.ILoggingEvent
 import scala.collection.mutable.ListBuffer
 import ch.qos.logback.classic.{ Logger, LoggerContext, Level }
-import play.api.Play
 
 /**
  * Test utility for testing Play logs
@@ -19,7 +18,7 @@ object LogTester {
     val ctx = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
     val root = ctx.getLogger("ROOT")
     val rootLevel = root.getLevel
-    val playLogger = Play.logger.logger.asInstanceOf[Logger]
+    val playLogger = play.api.Logger(this.getClass).asInstanceOf[Logger]
     val playLevel = playLogger.getLevel
     val appender = new LogBuffer()
     appender.start()

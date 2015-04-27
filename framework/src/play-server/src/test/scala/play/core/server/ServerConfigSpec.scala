@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.core.server
 
@@ -10,7 +10,7 @@ import play.core.ApplicationProvider
 
 object ServerConfigSpec extends Specification {
 
-  "ServerConfig" should {
+  "ServerConfig construction" should {
     "fail when both http and https ports are missing" in {
       ServerConfig(
         rootDir = new File("/asdasd"),

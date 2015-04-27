@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.auth
 
@@ -60,5 +60,5 @@ object SecuritySpec extends PlaySpecification {
   case class Connection(name: String)
 
   def withApplication[T](block: => T) =
-    running(FakeApplication(additionalConfiguration = Map("application.secret" -> "foobar")))(block)
+    running(FakeApplication(additionalConfiguration = Map("play.crypto.secret" -> "foobar")))(block)
 }

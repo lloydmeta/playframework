@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.json
 
@@ -40,31 +40,27 @@ object JsError {
     JsError(merge(e1.errors, e2.errors))
   }
 
-  //def toJson: JsValue = original // TODO
+  def toJson(e: JsError): JsObject = toJson(e.errors, false)
+  def toJson(errors: Seq[(JsPath, Seq[ValidationError])]): JsObject = toJson(errors, false)
   //def toJsonErrorsOnly: JsValue = original // TODO
   def toFlatForm(e: JsError): Seq[(String, Seq[ValidationError])] = e.errors.map { case (path, seq) => path.toJsonString -> seq }
-  def toFlatJson(e: JsError): JsObject = toFlatJson(e.errors)
-  def toFlatJson(errors: Seq[(JsPath, Seq[ValidationError])]): JsObject =
+
+  @deprecated("Use toJson which include alternative message keys", "2.3")
+  def toFlatJson(e: JsError): JsObject = toJson(e.errors, true)
+  @deprecated("Use toJson which include alternative message keys", "2.3")
+  def toFlatJson(errors: Seq[(JsPath, Seq[ValidationError])]): JsObject = toJson(errors, true)
+
+  private def toJson(errors: Seq[(JsPath, Seq[ValidationError])], flat: Boolean): JsObject = {
+    val argsWrite = Writes.traversableWrites[Any](Writes.anyWrites)
     errors.foldLeft(Json.obj()) { (obj, error) =>
       obj ++ Json.obj(error._1.toJsonString -> error._2.foldLeft(Json.arr()) { (arr, err) =>
         arr :+ Json.obj(
-          "msg" -> err.message,
-          "args" -> err.args.foldLeft(Json.arr()) { (arr, arg) =>
-            arr :+ (arg match {
-              case s: String => JsString(s)
-              case nb: Int => JsNumber(nb)
-              case nb: Short => JsNumber(nb)
-              case nb: Long => JsNumber(nb)
-              case nb: Double => JsNumber(nb)
-              case nb: Float => JsNumber(nb)
-              case b: Boolean => JsBoolean(b)
-              case js: JsValue => js
-              case x => JsString(x.toString)
-            })
-          }
+          "msg" -> (if (flat) err.message else Json.toJson(err.messages)),
+          "args" -> Json.toJson(err.args)(argsWrite)
         )
       })
     }
+  }
 }
 
 sealed trait JsResult[+A] { self =>
@@ -204,5 +200,9 @@ object JsResult {
       case (JsError(e), _) => JsError(e)
       case (_, JsError(e)) => JsError(e)
     }
+  }
+
+  implicit val functorJsResult: Functor[JsResult] = new Functor[JsResult] {
+    override def fmap[A, B](m: JsResult[A], f: A => B) = m map f
   }
 }

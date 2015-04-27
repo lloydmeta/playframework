@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # The Play WS API
 
 Sometimes we would like to call other HTTP services from within a Play application. Play supports this via its [WS library](api/scala/index.html#play.api.libs.ws.package), which provides a way to make asynchronous HTTP calls.
@@ -155,7 +155,7 @@ Using for comprehensions is a good way to chain WS calls in a trusted environmen
 
 ### Using in a controller
 
-When making a request from a controller, you can map the response to a `Future[Result]`.  This can be used in combination with Play's `Action.async` action builder, as described in [[Handling Asynchronous Results|ScalaAsync]].
+When making a request from a controller, you can map the response to a `Future[Result]`. This can be used in combination with Play's `Action.async` action builder, as described in [[Handling Asynchronous Results|ScalaAsync]].
 
 @[async-result](code/ScalaWSSpec.scala)
 
@@ -163,11 +163,11 @@ When making a request from a controller, you can map the response to a `Future[R
 
 WSClient is a wrapper around the underlying AsyncHttpClient.  It is useful for defining multiple clients with different profiles, or using a mock.
 
-You can define a WS client directly from code without having it injected by WS, and then use it implicitly with `WS.clientUrl()`.  Note that you should always use `NingAsyncHttpClientConfigBuilder` when configuring your client, for secure TLS configuration:
+You can define a WS client directly from code without having it injected by WS, and then use it implicitly with `WS.clientUrl()`. Note that you should always use `NingAsyncHttpClientConfigBuilder` when configuring your client, for secure TLS configuration:
 
 @[implicit-client](code/ScalaWSSpec.scala)
 
-> NOTE: if you instantiate a NingWSClient object, it does not use the WS module lifecycle, and so will not be automatically closed in `Application.onStop`. Instead, the client must be manually shutdown using `client.close()` when processing has completed.  This will release the underlying ThreadPoolExecutor used by AsyncHttpClient.  Failure to close the client may result in out of memory exceptions (especially if you are reloading an application frequently in development mode).
+> NOTE: if you instantiate a NingWSClient object, it does not use the WS module lifecycle, and so will not be automatically closed in `Application.onStop`. Instead, the client must be manually shutdown using `client.close()` when processing has completed. This will release the underlying ThreadPoolExecutor used by AsyncHttpClient. Failure to close the client may result in out of memory exceptions (especially if you are reloading an application frequently in development mode).
 
 or directly:
 
@@ -194,10 +194,10 @@ This is important in a couple of cases.  WS has a couple of limitations that req
 
 Use the following properties in `application.conf` to configure the WS client:
 
-* `ws.followRedirects`: Configures the client to follow 301 and 302 redirects *(default is **true**)*.
-* `ws.useProxyProperties`: To use the system http proxy settings(http.proxyHost, http.proxyPort) *(default is **true**)*. 
-* `ws.useragent`: To configure the User-Agent header field.
-* `ws.compressionEnable`: Set it to true to use gzip/deflater encoding *(default is **false**)*.
+* `play.ws.followRedirects`: Configures the client to follow 301 and 302 redirects *(default is **true**)*.
+* `play.ws.useProxyProperties`: To use the system http proxy settings(http.proxyHost, http.proxyPort) *(default is **true**)*.
+* `play.ws.useragent`: To configure the User-Agent header field.
+* `play.ws.compressionEnabled`: Set it to true to use gzip/deflater encoding *(default is **false**)*.
 
 ### Configuring WS with SSL
 
@@ -207,8 +207,25 @@ To configure WS for use with HTTP over SSL/TLS (HTTPS), please see [[Configuring
 
 There are 3 different timeouts in WS. Reaching a timeout causes the WS request to interrupt.
 
-* `ws.timeout.connection`: The maximum time to wait when connecting to the remote host *(default is **120 seconds**)*.
-* `ws.timeout.idle`: The maximum time the request can stay idle (connection is established but waiting for more data) *(default is **120 seconds**)*.
-* `ws.timeout.request`: The total time you accept a request to take (it will be interrupted even if the remote host is still sending data) *(default is **none**, to allow stream consuming)*.
+* `play.ws.timeout.connection`: The maximum time to wait when connecting to the remote host *(default is **120 seconds**)*.
+* `play.ws.timeout.idle`: The maximum time the request can stay idle (connection is established but waiting for more data) *(default is **120 seconds**)*.
+* `play.ws.timeout.request`: The total time you accept a request to take (it will be interrupted even if the remote host is still sending data) *(default is **120 seconds**)*.
 
 The request timeout can be overridden for a specific connection with `withRequestTimeout()` (see "Making a Request" section).
+
+### Configuring AsyncClientConfig
+
+The following advanced settings can be configured on the underlying AsyncHttpClientConfig.
+Please refer to the [AsyncHttpClientConfig Documentation](http://asynchttpclient.github.io/async-http-client/apidocs/com/ning/http/client/AsyncHttpClientConfig.Builder.html) for more information.
+
+* `play.ws.ning.allowPoolingConnection`
+* `play.ws.ning.allowSslConnectionPool`
+* `play.ws.ning.ioThreadMultiplier`
+* `play.ws.ning.maxConnectionsPerHost`
+* `play.ws.ning.maxConnectionsTotal`
+* `play.ws.ning.maxConnectionLifeTime`
+* `play.ws.ning.idleConnectionInPoolTimeout`
+* `ws.ning.webSocketIdleTimeout`
+* `play.ws.ning.maxNumberOfRedirects`
+* `play.ws.ning.maxRequestRetry`
+* `play.ws.ning.disableUrlEncoding`

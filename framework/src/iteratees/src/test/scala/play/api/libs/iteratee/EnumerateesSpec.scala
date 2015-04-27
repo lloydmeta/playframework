@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.iteratee
 
@@ -176,6 +176,12 @@ object EnumerateesSpec extends Specification
         val take3AndConsume = (Enumeratee.takeWhile[String](_ != "4")(takeWhileEC) &>> Iteratee.consume()).flatMap(_ => Iteratee.consume())(consumeFlatMapEC)
         val enumerator = Enumerator(Range(1, 20).map(_.toString): _*)
         Await.result(enumerator |>>> take3AndConsume, Duration.Inf) must equalTo(Range(4, 20).map(_.toString).mkString)
+      }
+    }
+
+    "pass input through while the predicate is met" in {
+      mustExecute(3) { breakEC =>
+        mustTransformTo(1, 2, 3, 2, 1)(1, 2)(Enumeratee.takeWhile[Int](_ <= 2)(breakEC))
       }
     }
 

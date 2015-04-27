@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.db;
 
@@ -135,20 +135,16 @@ public class DatabaseTest {
     public void provideConnectionHelpers() throws Exception {
         Database db = Database.inMemory("test-withConnection");
 
-        db.withConnection(new ConnectionRunnable() {
-            public void run(Connection c) throws SQLException {
-                c.createStatement().execute("create table test (id bigint not null, name varchar(255))");
-                c.createStatement().execute("insert into test (id, name) values (1, 'alice')");
-            }
+        db.withConnection(c -> {
+            c.createStatement().execute("create table test (id bigint not null, name varchar(255))");
+            c.createStatement().execute("insert into test (id, name) values (1, 'alice')");
         });
 
-        boolean result = db.withConnection(new ConnectionCallable<Boolean>() {
-            public Boolean call(Connection c) throws SQLException {
-                ResultSet results = c.createStatement().executeQuery("select * from test");
-                assertThat(results.next(), is(true));
-                assertThat(results.next(), is(false));
-                return true;
-            }
+        boolean result = db.withConnection(c -> {
+            ResultSet results = c.createStatement().executeQuery("select * from test");
+            assertThat(results.next(), is(true));
+            assertThat(results.next(), is(false));
+            return true;
         });
 
         assertThat(result, is(true));
@@ -160,41 +156,33 @@ public class DatabaseTest {
     public void provideTransactionHelper() throws Exception {
         Database db = Database.inMemory("test-withTransaction");
 
-        boolean created = db.withTransaction(new ConnectionCallable<Boolean>() {
-            public Boolean call(Connection c) throws SQLException {
-                c.createStatement().execute("create table test (id bigint not null, name varchar(255))");
-                c.createStatement().execute("insert into test (id, name) values (1, 'alice')");
-                return true;
-            }
+        boolean created = db.withTransaction(c -> {
+            c.createStatement().execute("create table test (id bigint not null, name varchar(255))");
+            c.createStatement().execute("insert into test (id, name) values (1, 'alice')");
+            return true;
         });
 
         assertThat(created, is(true));
 
-        db.withConnection(new ConnectionRunnable() {
-            public void run(Connection c) throws SQLException {
-                ResultSet results = c.createStatement().executeQuery("select * from test");
-                assertThat(results.next(), is(true));
-                assertThat(results.next(), is(false));
-            }
+        db.withConnection(c -> {
+            ResultSet results = c.createStatement().executeQuery("select * from test");
+            assertThat(results.next(), is(true));
+            assertThat(results.next(), is(false));
         });
 
         try {
-            db.withTransaction(new ConnectionRunnable() {
-                public void run(Connection c) throws SQLException {
-                    c.createStatement().execute("insert into test (id, name) values (2, 'bob')");
-                    throw new RuntimeException("boom");
-                }
+            db.withTransaction((Connection c) -> {
+                c.createStatement().execute("insert into test (id, name) values (2, 'bob')");
+                throw new RuntimeException("boom");
             });
         } catch (Exception e) {
             assertThat(e.getMessage(), equalTo("boom"));
         }
 
-        db.withConnection(new ConnectionRunnable() {
-            public void run(Connection c) throws SQLException {
-                ResultSet results = c.createStatement().executeQuery("select * from test");
-                assertThat(results.next(), is(true));
-                assertThat(results.next(), is(false));
-            }
+        db.withConnection(c -> {
+            ResultSet results = c.createStatement().executeQuery("select * from test");
+            assertThat(results.next(), is(true));
+            assertThat(results.next(), is(false));
         });
 
         db.shutdown();
@@ -206,7 +194,7 @@ public class DatabaseTest {
         db.getConnection().close();
         db.shutdown();
         exception.expect(SQLException.class);
-        exception.expectMessage(startsWith("Attempting to obtain a connection from a pool that has already been shutdown"));
+        exception.expectMessage(startsWith("Pool has been shutdown"));
         db.getConnection().close();
     }
 }

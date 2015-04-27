@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # SBT Cookbook
 
 ## Hook actions around `play run`
@@ -66,7 +66,7 @@ object Grunt {
 
     object GruntProcess extends PlayRunHook {
 
-    var process: Option[Process] = None
+      var process: Option[Process] = None
 
       override def beforeStarted(): Unit = {
         Process("grunt dist", base).run

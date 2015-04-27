@@ -1,6 +1,6 @@
 /*
  *
- *  * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ *  * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  *
  */
 package play.api.libs.ws.ssl
@@ -38,7 +38,7 @@ import KeystoreFormats._
  *
  * @see java.security.cert.CertificateFactory
  */
-class StringBasedKeyStoreBuilder(data: String, password: Option[Array[Char]] = None) extends KeyStoreBuilder {
+class StringBasedKeyStoreBuilder(data: String) extends KeyStoreBuilder {
 
   val logger = org.slf4j.LoggerFactory.getLogger(getClass)
 

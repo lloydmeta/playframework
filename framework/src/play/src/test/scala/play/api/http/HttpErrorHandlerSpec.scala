@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.http
 
@@ -7,7 +7,7 @@ import org.specs2.mutable.Specification
 import play.api.inject.BindingKey
 import play.api.{ OptionalSourceMapper, Configuration, Mode, Environment }
 import play.api.mvc.{ Results, RequestHeader }
-import play.core.Router
+import play.api.routing._
 import play.core.test.{ FakeRequest, Fakes }
 
 import scala.concurrent.{ Await, Future }
@@ -64,10 +64,10 @@ object HttpErrorHandlerSpec extends Specification {
 
   def handler(handlerClass: String, mode: Mode.Mode) = {
     val config = Configuration.from(Map("play.http.errorHandler" -> handlerClass))
-    val env = Environment.simple(mode)
+    val env = Environment.simple(mode = mode)
     Fakes.injectorFromBindings(HttpErrorHandler.bindingsFromConfiguration(env, config)
       ++ Seq(
-        BindingKey(classOf[Router.Routes]).to(Router.Null),
+        BindingKey(classOf[Router]).to(Router.empty),
         BindingKey(classOf[OptionalSourceMapper]).to(new OptionalSourceMapper(None)),
         BindingKey(classOf[Configuration]).to(config),
         BindingKey(classOf[Environment]).to(env)

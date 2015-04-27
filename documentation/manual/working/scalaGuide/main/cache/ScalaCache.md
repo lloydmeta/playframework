@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # The Play cache API
 
 Caching data is a typical optimization in modern applications, and so Play provides a global cache. An important point about the cache is that it behaves just like a cache should: the data you just stored may just go missing.
@@ -52,7 +52,7 @@ It is possible to access different caches.  The default cache is called `play`, 
 
 If you want to access multiple different ehcache caches, then you'll need to tell Play to bind them in `application.conf`, like so:
 
-    play.modules.cache.bindCaches = ["db-cache", "user-cache", "session-cache"]
+    play.cache.bindCaches = ["db-cache", "user-cache", "session-cache"]
 
 Now to access these different caches, when you inject them, use the [NamedCache](api/java/play/cache/NamedCache.html) qualifier on your dependency, for example:
 
@@ -60,16 +60,19 @@ Now to access these different caches, when you inject them, use the [NamedCache]
 
 ## Caching HTTP responses
 
-You can easily create smart cached actions using standard Action composition. 
+You can easily create smart cached actions using standard Action composition.
 
 > **Note:** Play HTTP `Result` instances are safe to cache and reuse later.
 
-Play provides a default built-in helper for standard cases:
+The [Cached](api/scala/index.html#play.api.cache.Cached) class helps you build cached actions.
+
+@[cached-action-app](code/ScalaCache.scala)
+
+You can cache the result of an action using a fixed key like `"homePage"`.
 
 @[cached-action](code/ScalaCache.scala)
 
-
-Or even:
+If results vary, you can cache each result using a different key. In this example, each user has a different cached result.
 
 @[composition-cached-action](code/ScalaCache.scala)
 
@@ -89,6 +92,12 @@ Or cache 404 Not Found only for a couple of minutes
 
 It is possible to provide a custom implementation of the [CacheApi](api/scala/index.html#play.api.cache.CacheApi) that either replaces, or sits along side the default implementation.
 
-To replace the default implementation, you'll need to disable the default implementation by setting `play.modules.cache.enabled` to `false` in `application.conf`.  Then simply implement CacheApi and bind it in the DI container.
+To replace the default implementation, you'll need to disable the default implementation by setting the following in `application.conf`:
+
+```
+play.modules.disabled += "play.api.cache.EhCacheModule"
+```
+
+Then simply implement CacheApi and bind it in the DI container.
 
 To provide an implementation of the cache API in addition to the default implementation, you can either create a custom qualifier, or reuse the `NamedCache` qualifier to bind the implementation.

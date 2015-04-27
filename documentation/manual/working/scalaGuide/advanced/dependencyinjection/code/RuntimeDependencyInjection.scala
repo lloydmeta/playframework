@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package scalaguide.advanced.dependencyinjection
 
@@ -120,6 +120,42 @@ class HelloModule extends AbstractModule {
 //#guice-module
 }
 
+package dynamicguicemodule {
+
+import implemented._
+
+//#dynamic-guice-module
+import com.google.inject.AbstractModule
+import com.google.inject.name.Names
+import play.api.{ Configuration, Environment }
+  
+class HelloModule(
+  environment: Environment,
+  configuration: Configuration) extends AbstractModule {
+  def configure() = {
+    // Expect configuration like:
+    // hello.en = "myapp.EnglishHello"
+    // hello.de = "myapp.GermanHello"
+    val helloConfiguration: Configuration =
+      configuration.getConfig("hello").getOrElse(Configuration.empty)
+    val languages: Set[String] = helloConfiguration.subKeys
+    // Iterate through all the languages and bind the
+    // class associated with that language. Use Play's
+    // ClassLoader to load the classes.
+    for (l <- languages) {
+      val bindingClassName: String = helloConfiguration.getString(l).get
+      val bindingClass: Class[_ <: Hello] =
+        environment.classLoader.loadClass(bindingClassName)
+        .asSubclass(classOf[Hello])
+      bind(classOf[Hello])
+        .annotatedWith(Names.named(l))
+        .to(bindingClass)
+    }
+  }
+}
+//#dynamic-guice-module
+}
+
 package playmodule {
 
 import play.api.{Configuration, Environment}
@@ -137,4 +173,11 @@ class HelloModule extends Module {
   )
 }
 //#play-module
+}
+
+package injected.controllers {
+  import play.api.mvc._
+  class Application {
+    def index = Action(Results.Ok)
+  }
 }

@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.inject
 
+import java.lang.reflect.Constructor
+import play.{ Configuration => JavaConfiguration, Environment => JavaEnvironment }
 import play.api._
 import play.utils.PlayIO
 import scala.annotation.varargs
@@ -58,12 +60,12 @@ abstract class Module {
   /**
    * Create a binding key for the given class.
    */
-  final def bind[T](clazz: Class[T]): BindingKey[T] = BindingKey(clazz)
+  final def bind[T](clazz: Class[T]): BindingKey[T] = play.api.inject.bind(clazz)
 
   /**
    * Create a binding key for the given class.
    */
-  final def bind[T: ClassTag]: BindingKey[T] = BindingKey(implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]])
+  final def bind[T: ClassTag]: BindingKey[T] = play.api.inject.bind[T]
 
   /**
    * Create a seq.
@@ -80,7 +82,8 @@ object Modules {
    * Locate the modules from the environment.
    *
    * Loads all modules specified by the play.modules.enabled property, minus the modules specified by the
-   * play.modules.disabled property.
+   * play.modules.disabled property. If the modules have constructors that take an `Environment` and a
+   * `Configuration`, then these constructors are called first; otherwise default constructors are called.
    *
    * @param environment The environment.
    * @param configuration The configuration.
@@ -88,16 +91,36 @@ object Modules {
    *         allowing ApplicationLoader implementations to reuse the same mechanism to load modules specific to them.
    */
   def locate(environment: Environment, configuration: Configuration): Seq[Any] = {
-    import scala.collection.JavaConverters._
 
-    val includes = configuration.underlying.getStringList("play.modules.enabled").asScala
-    val excludes = configuration.underlying.getStringList("play.modules.disabled").asScala
+    val includes = configuration.getStringSeq("play.modules.enabled").getOrElse(Seq.empty)
+    val excludes = configuration.getStringSeq("play.modules.disabled").getOrElse(Seq.empty)
 
     val moduleClassNames = includes.toSet -- excludes
 
     moduleClassNames.map { className =>
       try {
-        environment.classLoader.loadClass(className).newInstance()
+        val clazz = environment.classLoader.loadClass(className)
+
+        def tryConstruct(args: AnyRef*): Option[Any] = {
+          val ctor: Option[Constructor[_]] = try {
+            val argTypes = args.map(_.getClass)
+            Some(clazz.getConstructor(argTypes: _*))
+          } catch {
+            case _: NoSuchMethodException => None
+            case _: SecurityException => None
+          }
+          ctor.map(_.newInstance(args: _*))
+        }
+
+        {
+          tryConstruct(environment, configuration)
+        } orElse {
+          tryConstruct(new JavaEnvironment(environment), new JavaConfiguration(configuration))
+        } orElse {
+          tryConstruct()
+        } getOrElse {
+          throw new PlayException("No valid constructors", "Module [" + className + "] cannot be instantiated.")
+        }
       } catch {
         case e: PlayException => throw e
         case e: VirtualMachineError => throw e

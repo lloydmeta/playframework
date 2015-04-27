@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.i18n;
 
@@ -23,6 +23,10 @@ import java.util.Locale;
 public class MessagesApi {
 
     private final play.api.i18n.MessagesApi messages;
+
+    public play.api.i18n.MessagesApi scalaApi() {
+        return messages;
+    }
 
     @Inject
     public MessagesApi(play.api.i18n.MessagesApi messages) {

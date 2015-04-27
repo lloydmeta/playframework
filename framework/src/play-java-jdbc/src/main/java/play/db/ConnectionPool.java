@@ -1,11 +1,12 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.db;
 
 import javax.sql.DataSource;
 
 import play.Configuration;
+import play.Environment;
 
 /**
  * Connection pool API for managing data sources.
@@ -17,10 +18,10 @@ public interface ConnectionPool {
      *
      * @param name the database name
      * @param configuration the data source configuration
-     * @param classLoader the database class loader
+     * @param environment the database environment
      * @return a data source backed by a connection pool
      */
-    public DataSource create(String name, Configuration configuration, ClassLoader classLoader);
+    public DataSource create(String name, Configuration configuration, Environment environment);
 
     /**
      * Close the given data source.

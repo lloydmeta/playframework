@@ -1,15 +1,19 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.mvc {
+
+  import java.util.Locale
 
   import play.api._
   import play.api.http.{ HttpConfiguration, MediaType, MediaRange, HeaderNames }
   import play.api.i18n.Lang
   import play.api.libs.iteratee._
   import play.api.libs.Crypto
+  import play.core.utils.CaseInsensitiveOrdered
 
   import scala.annotation._
+  import scala.collection.immutable.{ TreeMap, TreeSet }
   import scala.util.control.NonFatal
   import scala.util.Try
   import java.net.{ URLDecoder, URLEncoder }
@@ -33,6 +37,9 @@ package play.api.mvc {
 
     /**
      * The complete request URI, containing both path and query string.
+     * The URI is what was on the status line after the request method.
+     * E.g. in "GET /foo/bar?q=s HTTP/1.1" the URI should be /foo/bar?q=s.
+     * It could be absolute, some clients send absolute URLs, especially proxies.
      */
     def uri: String
 
@@ -64,18 +71,15 @@ package play.api.mvc {
     /**
      * The client IP address.
      *
-     * If the `X-Forwarded-For` header is present, then this method will return the value in that header
-     * if either the local address is 127.0.0.1, or if `trustxforwarded` is configured to be true in the
-     * application configuration file.
+     * retrieves the last untrusted proxy
+     * from the Forwarded-Headers or the X-Forwarded-*-Headers.
+     *
+     *
      */
     def remoteAddress: String
 
     /**
      * Is the client using SSL?
-     *
-     * If the <code>X-Forwarded-Proto</code> header is present, then this method will return true
-     * if the value in that header is "https", if either the local address is 127.0.0.1, or if
-     * <code>trustxforwarded</code> is configured to be true in the application configuration file.
      */
     def secure: Boolean
 
@@ -170,9 +174,9 @@ package play.api.mvc {
       version: String = this.version,
       queryString: Map[String, Seq[String]] = this.queryString,
       headers: Headers = this.headers,
-      remoteAddress: String = this.remoteAddress,
-      secure: Boolean = this.secure): RequestHeader = {
-      val (_id, _tags, _uri, _path, _method, _version, _queryString, _headers, _remoteAddress, _secure) = (id, tags, uri, path, method, version, queryString, headers, remoteAddress, secure)
+      remoteAddress: => String = this.remoteAddress,
+      secure: => Boolean = this.secure): RequestHeader = {
+      val (_id, _tags, _uri, _path, _method, _version, _queryString, _headers, _remoteAddress, _secure) = (id, tags, uri, path, method, version, queryString, headers, () => remoteAddress, () => secure)
       new RequestHeader {
         val id = _id
         val tags = _tags
@@ -182,8 +186,8 @@ package play.api.mvc {
         val version = _version
         val queryString = _queryString
         val headers = _headers
-        val remoteAddress = _remoteAddress
-        val secure = _secure
+        lazy val remoteAddress = _remoteAddress()
+        lazy val secure = _secure()
       }
     }
 
@@ -202,7 +206,7 @@ package play.api.mvc {
      */
     private[play] def acceptHeader(headers: Headers, headerName: String): Seq[(Double, String)] = {
       for {
-        header <- headers.get(headerName).toSeq
+        header <- headers.get(headerName).toList
         value0 <- header.split(',')
         value = value0.trim
       } yield {
@@ -212,6 +216,19 @@ package play.api.mvc {
         }
       }
     }
+  }
+
+  private[play] class RequestHeaderImpl(
+      val id: Long,
+      val tags: Map[String, String],
+      val uri: String,
+      val path: String,
+      val method: String,
+      val version: String,
+      val queryString: Map[String, Seq[String]],
+      val headers: Headers,
+      val remoteAddress: String,
+      val secure: Boolean) extends RequestHeader {
   }
 
   /**
@@ -245,6 +262,21 @@ package play.api.mvc {
       lazy val body = f(self.body)
     }
 
+  }
+
+  /** Used by Java wrapper */
+  private[play] class RequestImpl[A](
+      val body: A,
+      val id: Long,
+      val tags: Map[String, String],
+      val uri: String,
+      val path: String,
+      val method: String,
+      val version: String,
+      val queryString: Map[String, Seq[String]],
+      val headers: Headers,
+      val remoteAddress: String,
+      val secure: Boolean) extends Request[A] {
   }
 
   object Request {
@@ -290,7 +322,7 @@ package play.api.mvc {
    * @param method the request HTTP method
    * @param url the request URL
    */
-  case class Call(method: String, url: String) extends play.mvc.Call {
+  case class Call(method: String, url: String, fragment: String = null) extends play.mvc.Call {
 
     /**
      * Transform this call to an absolute URL.
@@ -310,7 +342,7 @@ package play.api.mvc {
      * Transform this call to an absolute URL.
      */
     def absoluteURL(secure: Boolean)(implicit request: RequestHeader): String =
-      "http" + (if (secure) "s" else "") + "://" + request.host + this.url
+      "http" + (if (secure) "s" else "") + "://" + request.host + this.url + this.appendFragment
 
     /**
      * Transform this call to an WebSocket URL.
@@ -331,14 +363,29 @@ package play.api.mvc {
      */
     def webSocketURL(secure: Boolean)(implicit request: RequestHeader): String = "ws" + (if (secure) "s" else "") + "://" + request.host + this.url
 
-    override def toString = url
+    override def toString = this.url + this.appendFragment
 
   }
 
   /**
    * The HTTP headers set.
    */
-  trait Headers {
+  class Headers(val headers: Seq[(String, String)]) {
+
+    /**
+     * Append the given headers
+     */
+    def add(headers: (String, String)*) = new Headers(this.headers ++ headers)
+
+    /**
+     * Retrieves the first header value which is associated with the given key.
+     */
+    def apply(key: String): String = get(key).getOrElse(scala.sys.error("Header doesn't exist"))
+
+    override def equals(other: Any) = {
+      other.isInstanceOf[Headers] &&
+        toMap == other.asInstanceOf[Headers].toMap
+    }
 
     /**
      * Optionally returns the first header value associated with a key.
@@ -346,44 +393,59 @@ package play.api.mvc {
     def get(key: String): Option[String] = getAll(key).headOption
 
     /**
-     * Retrieves the first header value which is associated with the given key.
-     */
-    def apply(key: String): String = get(key).getOrElse(scala.sys.error("Header doesn't exist"))
-
-    /**
      * Retrieve all header values associated with the given key.
      */
-    def getAll(key: String): Seq[String] = toMap.get(key).getOrElse(Nil)
+    def getAll(key: String): Seq[String] = toMap.getOrElse(key, Nil)
+
+    override def hashCode = {
+      toMap.map {
+        case (name, value) =>
+          name.toLowerCase(Locale.ENGLISH) -> value
+      }.hashCode()
+    }
 
     /**
      * Retrieve all header keys
      */
-    def keys: Set[String] = {
-      Set.empty ++ data.map(_._1)
+    def keys: Set[String] = toMap.keySet
+
+    /**
+     * Remove any headers with the given keys
+     */
+    def remove(keys: String*) = {
+      val keySet = TreeSet(keys: _*)(CaseInsensitiveOrdered)
+      new Headers(headers.filterNot { case (name, _) => keySet(name) })
     }
+
+    /**
+     * Append the given headers, replacing any existing headers having the same keys
+     */
+    def replace(headers: (String, String)*) = remove(headers.map(_._1): _*).add(headers: _*)
 
     /**
      * Transform the Headers to a Map
      */
     lazy val toMap: Map[String, Seq[String]] = {
-      import collection.immutable.TreeMap
-      import play.core.utils.CaseInsensitiveOrdered
-      TreeMap(data: _*)(CaseInsensitiveOrdered)
+      val map = headers.groupBy(_._1.toLowerCase(Locale.ENGLISH)).map {
+        case (_, headers) =>
+          // choose the case of first header as canonical
+          headers.head._1 -> headers.map(_._2)
+      }
+      TreeMap(map.toSeq: _*)(CaseInsensitiveOrdered)
     }
-
-    /**
-     * The internal data structure here is a sequence of header to sequence of value pairs. Multiple
-     * headers with the same name are not expected in the sequence. Instead the same header with multiple values
-     * in the order that they appear in the http header is expected.
-     */
-    protected val data: Seq[(String, Seq[String])]
 
     /**
      * Transform the Headers to a Map by ignoring multiple values.
      */
     lazy val toSimpleMap: Map[String, String] = toMap.mapValues(_.headOption.getOrElse(""))
 
-    override def toString = data.toString
+    override def toString = headers.toString()
+
+  }
+
+  object Headers {
+
+    def apply(headers: (String, String)*) = new Headers(headers)
 
   }
 
@@ -499,8 +561,18 @@ package play.api.mvc {
     /**
      * Decodes the data from a `Cookie`.
      */
-    def decodeFromCookie(cookie: Option[Cookie]): T = {
-      cookie.filter(_.name == COOKIE_NAME).map(c => deserialize(decode(c.value))).getOrElse(emptyCookie)
+    def decodeCookieToMap(cookie: Option[Cookie]): Map[String, String] = {
+      serialize(decodeFromCookie(cookie))
+    }
+
+    /**
+     * Decodes the data from a `Cookie`.
+     */
+    def decodeFromCookie(cookie: Option[Cookie]): T = if (cookie.isEmpty) emptyCookie else {
+      val extractedCookie: Cookie = cookie.get
+      if (extractedCookie.name != COOKIE_NAME) emptyCookie /* can this happen? */ else {
+        deserialize(decode(extractedCookie.value))
+      }
     }
 
     def discard = DiscardingCookie(COOKIE_NAME, path, domain, secure)
@@ -654,6 +726,9 @@ package play.api.mvc {
 
     val COOKIE_NAME = HttpConfiguration.current.flash.cookieName
     override def path = HttpConfiguration.current.context
+    override def secure = HttpConfiguration.current.flash.secure
+    override def httpOnly = HttpConfiguration.current.flash.httpOnly
+    override def domain = HttpConfiguration.current.session.domain
 
     val emptyCookie = new Flash
 
@@ -715,12 +790,17 @@ package play.api.mvc {
     // We use netty here but just as an API to handle cookies encoding
     import play.core.netty.utils.{ CookieEncoder, CookieDecoder, DefaultCookie }
 
+    private val logger = Logger(this.getClass)
+
     /**
      * Extract cookies from the Set-Cookie header.
      */
-    def apply(header: Option[String]) = new Cookies {
+    def apply(header: Option[String]): Cookies = new Cookies {
 
-      lazy val cookies: Map[String, Cookie] = header.map(Cookies.decode(_)).getOrElse(Seq.empty).groupBy(_.name).mapValues(_.head)
+      // This method is frequently called so it needs to be fast
+      private val cookies: Map[String, Cookie] = if (header.isDefined) {
+        Cookies.decode(header.get).groupBy(_.name).mapValues(_.head)
+      } else Map.empty
 
       def get(name: String) = cookies.get(name)
       override def toString = cookies.toString
@@ -767,7 +847,7 @@ package play.api.mvc {
           Cookie(c.getName, c.getValue, if (c.getMaxAge == Integer.MIN_VALUE) None else Some(c.getMaxAge), Option(c.getPath).getOrElse("/"), Option(c.getDomain), c.isSecure, c.isHttpOnly)
         }.toSeq
       }.getOrElse {
-        Play.logger.debug(s"Couldn't decode the Cookie header containing: $cookieHeader")
+        logger.debug(s"Couldn't decode the Cookie header containing: $cookieHeader")
         Nil
       }
     }

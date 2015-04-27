@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.db
 
@@ -18,7 +18,8 @@ import play.api.Application
  */
 object DB {
 
-  private def db(implicit app: Application): DBApi = app.injector.instanceOf[DBApi]
+  private val dbCache = Application.instanceCache[DBApi]
+  private def db(implicit app: Application): DBApi = dbCache(app)
 
   /**
    * Retrieves a JDBC connection.

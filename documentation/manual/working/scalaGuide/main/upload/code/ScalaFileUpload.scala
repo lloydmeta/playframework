@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package scalaguide.upload.fileupload {
 
@@ -67,7 +67,7 @@ package scalaguide.upload.fileupload {
     }
 
     def testAction[A](action: Action[A], request: => Request[A] = FakeRequest(), expectedResponse: Int = OK) = {
-      running(FakeApplication(additionalConfiguration = Map("application.secret" -> "pass"))) {
+      running(FakeApplication()) {
 
         val result = action(request)
 

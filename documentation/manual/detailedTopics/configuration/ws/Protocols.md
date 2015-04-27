@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Configuring Protocols
 
 By default, WS SSL will use the most secure version of the TLS protocol available in the JVM.
@@ -14,14 +14,14 @@ If you want to define a different [default protocol](http://docs.oracle.com/java
 
 ```
 # Passed into SSLContext.getInstance()
-ws.ssl.protocol = "TLSv1.2"
+play.ws.ssl.protocol = "TLSv1.2"
 ```
 
 If you want to define the list of enabled protocols, you can do so explicitly:
 
 ```
 # passed into sslContext.getDefaultParameters().setEnabledProtocols()
-ws.ssl.enabledProtocols = [
+play.ws.ssl.enabledProtocols = [
   "TLSv1.2",
   "TLSv1.1",
   "TLSv1"
@@ -37,5 +37,11 @@ WS recognizes "SSLv3", "SSLv2" and "SSLv2Hello" as weak protocols with a number 
 The debug options for configuring protocol are:
 
 ```
-ws.ssl.debug = [ "ssl", "sslctx", "handshake", "verbose", "data" ]
+play.ws.ssl.debug = {
+  ssl = true
+  sslctx = true
+  handshake = true
+  verbose = true
+  data = true
+}
 ```

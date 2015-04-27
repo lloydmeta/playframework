@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.filters.csrf
 
@@ -17,11 +17,12 @@ import org.specs2.matcher.MatchResult
  */
 trait CSRFCommonSpecs extends Specification with PlaySpecification {
 
-  import CSRFConf._
+  val TokenName = "csrfToken"
+  val HeaderName = "Csrf-Token"
 
   // This extracts the tests out into different configurations
   def sharedTests(csrfCheckRequest: CsrfTester, csrfAddToken: CsrfTester, generate: => String,
-    addToken: (WSRequestHolder, String) => WSRequestHolder,
+    addToken: (WSRequest, String) => WSRequest,
     getToken: WSResponse => Option[String], compareTokens: (String, String) => MatchResult[Any],
     errorStatusCode: Int) = {
     // accept/reject tokens
@@ -53,7 +54,7 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
       )(_.status must_== OK)
     }
     "accept requests with nocheck header" in {
-      csrfCheckRequest(_.withHeaders(HeaderName -> HeaderNoCheck)
+      csrfCheckRequest(_.withHeaders(HeaderName -> "nocheck")
         .post(Map("foo" -> "bar"))
       )(_.status must_== OK)
     }
@@ -107,7 +108,7 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
       def csrfCheckRequest = buildCsrfCheckRequest(false)
       def csrfAddToken = buildCsrfAddToken()
       def generate = Crypto.generateSignedToken
-      def addToken(req: WSRequestHolder, token: String) = req.withSession(TokenName -> token)
+      def addToken(req: WSRequest, token: String) = req.withSession(TokenName -> token)
       def getToken(response: WSResponse) = {
         val session = response.cookies.find(_.name.exists(_ == Session.COOKIE_NAME)).flatMap(_.value).map(Session.decode)
         session.flatMap(_.get(TokenName))
@@ -143,10 +144,10 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
     }
 
     "work with unsigned session tokens" in {
-      def csrfCheckRequest = buildCsrfCheckRequest(false, "csrf.sign.tokens" -> "false")
-      def csrfAddToken = buildCsrfAddToken("csrf.sign.tokens" -> "false")
+      def csrfCheckRequest = buildCsrfCheckRequest(false, "play.filters.csrf.token.sign" -> "false")
+      def csrfAddToken = buildCsrfAddToken("play.filters.csrf.token.sign" -> "false")
       def generate = Crypto.generateToken
-      def addToken(req: WSRequestHolder, token: String) = req.withSession(TokenName -> token)
+      def addToken(req: WSRequest, token: String) = req.withSession(TokenName -> token)
       def getToken(response: WSResponse) = {
         val session = response.cookies.find(_.name.exists(_ == Session.COOKIE_NAME)).flatMap(_.value).map(Session.decode)
         session.flatMap(_.get(TokenName))
@@ -157,10 +158,10 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
     }
 
     "work with signed cookie tokens" in {
-      def csrfCheckRequest = buildCsrfCheckRequest(false, "csrf.cookie.name" -> "csrf")
-      def csrfAddToken = buildCsrfAddToken("csrf.cookie.name" -> "csrf")
+      def csrfCheckRequest = buildCsrfCheckRequest(false, "play.filters.csrf.cookie.name" -> "csrf")
+      def csrfAddToken = buildCsrfAddToken("play.filters.csrf.cookie.name" -> "csrf")
       def generate = Crypto.generateSignedToken
-      def addToken(req: WSRequestHolder, token: String) = req.withCookies("csrf" -> token)
+      def addToken(req: WSRequest, token: String) = req.withCookies("csrf" -> token)
       def getToken(response: WSResponse) = response.cookies.find(_.name.exists(_ == "csrf")).flatMap(_.value)
       def compareTokens(a: String, b: String) = Crypto.compareSignedTokens(a, b) must beTrue
 
@@ -168,10 +169,10 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
     }
 
     "work with unsigned cookie tokens" in {
-      def csrfCheckRequest = buildCsrfCheckRequest(false, "csrf.cookie.name" -> "csrf", "csrf.sign.tokens" -> "false")
-      def csrfAddToken = buildCsrfAddToken("csrf.cookie.name" -> "csrf", "csrf.sign.tokens" -> "false")
+      def csrfCheckRequest = buildCsrfCheckRequest(false, "play.filters.csrf.cookie.name" -> "csrf", "play.filters.csrf.token.sign" -> "false")
+      def csrfAddToken = buildCsrfAddToken("play.filters.csrf.cookie.name" -> "csrf", "play.filters.csrf.token.sign" -> "false")
       def generate = Crypto.generateToken
-      def addToken(req: WSRequestHolder, token: String) = req.withCookies("csrf" -> token)
+      def addToken(req: WSRequest, token: String) = req.withCookies("csrf" -> token)
       def getToken(response: WSResponse) = response.cookies.find(_.name.exists(_ == "csrf")).flatMap(_.value)
       def compareTokens(a: String, b: String) = a must_== b
 
@@ -179,10 +180,10 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
     }
 
     "work with secure cookie tokens" in {
-      def csrfCheckRequest = buildCsrfCheckRequest(false, "csrf.cookie.name" -> "csrf", "csrf.cookie.secure" -> "true")
-      def csrfAddToken = buildCsrfAddToken("csrf.cookie.name" -> "csrf", "csrf.cookie.secure" -> "true")
+      def csrfCheckRequest = buildCsrfCheckRequest(false, "play.filters.csrf.cookie.name" -> "csrf", "play.filters.csrf.cookie.secure" -> "true")
+      def csrfAddToken = buildCsrfAddToken("play.filters.csrf.cookie.name" -> "csrf", "play.filters.csrf.cookie.secure" -> "true")
       def generate = Crypto.generateSignedToken
-      def addToken(req: WSRequestHolder, token: String) = req.withCookies("csrf" -> token)
+      def addToken(req: WSRequest, token: String) = req.withCookies("csrf" -> token)
       def getToken(response: WSResponse) = {
         response.cookies.find(_.name.exists(_ == "csrf")).flatMap { cookie =>
           cookie.secure must beTrue
@@ -195,10 +196,10 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
     }
 
     "work with checking failed result" in {
-      def csrfCheckRequest = buildCsrfCheckRequest(true, "csrf.cookie.name" -> "csrf")
-      def csrfAddToken = buildCsrfAddToken("csrf.cookie.name" -> "csrf")
+      def csrfCheckRequest = buildCsrfCheckRequest(true, "play.filters.csrf.cookie.name" -> "csrf")
+      def csrfAddToken = buildCsrfAddToken("play.filters.csrf.cookie.name" -> "csrf")
       def generate = Crypto.generateSignedToken
-      def addToken(req: WSRequestHolder, token: String) = req.withCookies("csrf" -> token)
+      def addToken(req: WSRequest, token: String) = req.withCookies("csrf" -> token)
       def getToken(response: WSResponse) = response.cookies.find(_.name.exists(_ == "csrf")).flatMap(_.value)
       def compareTokens(a: String, b: String) = Crypto.compareSignedTokens(a, b) must beTrue
 
@@ -207,7 +208,7 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
   }
 
   trait CsrfTester {
-    def apply[T](makeRequest: WSRequestHolder => Future[WSResponse])(handleResponse: WSResponse => T): T
+    def apply[T](makeRequest: WSRequest => Future[WSResponse])(handleResponse: WSResponse => T): T
   }
 
   /**
@@ -221,11 +222,11 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
    */
   def buildCsrfAddToken(configuration: (String, String)*): CsrfTester
 
-  implicit class EnrichedRequestHolder(request: WSRequestHolder) {
-    def withSession(session: (String, String)*): WSRequestHolder = {
+  implicit class EnrichedRequestHolder(request: WSRequest) {
+    def withSession(session: (String, String)*): WSRequest = {
       withCookies(Session.COOKIE_NAME -> Session.encode(session.toMap))
     }
-    def withCookies(cookies: (String, String)*): WSRequestHolder = {
+    def withCookies(cookies: (String, String)*): WSRequest = {
       request.withHeaders(COOKIE -> cookies.map(c => c._1 + "=" + c._2).mkString(", "))
     }
   }
@@ -234,7 +235,7 @@ trait CSRFCommonSpecs extends Specification with PlaySpecification {
   implicit def simpleFormContentType: ContentTypeOf[Map[String, String]] = ContentTypeOf[Map[String, String]](Some(ContentTypes.FORM))
 
   def withServer[T](config: Seq[(String, String)])(router: PartialFunction[(String, String), Handler])(block: => T) = running(TestServer(testServerPort, FakeApplication(
-    additionalConfiguration = Map(config: _*) ++ Map("application.secret" -> "foobar"),
+    additionalConfiguration = Map(config: _*) ++ Map("play.crypto.secret" -> "foobar"),
     withRoutes = router
   )))(block)
 }

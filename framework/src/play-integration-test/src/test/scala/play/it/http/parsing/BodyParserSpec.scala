@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http.parsing
 
 import scala.concurrent.Future
 
 import play.api.libs.iteratee.{ Done, Enumerator, ExecutionSpecification, Input }
-import play.api.mvc.{ BodyParser, BodyParsers, Results, Result }
+import play.api.mvc.{ BodyParser, Results, Result }
 import play.api.test.{ FakeRequest, PlaySpecification }
 
 import org.specs2.ScalaCheck

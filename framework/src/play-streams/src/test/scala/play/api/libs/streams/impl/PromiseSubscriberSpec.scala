@@ -1,13 +1,14 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.streams.impl
 
-import org.reactivestreams._
 import org.specs2.mutable.Specification
 import scala.concurrent.duration.{ FiniteDuration => ScalaFiniteDuration, SECONDS }
-import scala.concurrent.{ Future, Promise }
+import scala.concurrent.Promise
 import scala.util.{ Failure, Success, Try }
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class PromiseSubscriberSpec extends Specification {
 

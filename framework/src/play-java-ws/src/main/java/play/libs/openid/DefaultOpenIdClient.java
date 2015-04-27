@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.libs.openid;
 
-import play.core.Invoker;
+import play.core.Execution;
 import play.libs.F;
 import play.libs.Scala;
 import play.mvc.Http;
@@ -79,7 +79,7 @@ public class DefaultOpenIdClient implements OpenIdClient {
                     public UserInfo apply(play.api.libs.openid.UserInfo scalaUserInfo) {
                         return new UserInfo(scalaUserInfo.id(), JavaConversions.mapAsJavaMap(scalaUserInfo.attributes()));
                     }
-                }, Invoker.executionContext());
+                }, Execution.internalContext());
         return F.Promise.wrap(scalaPromise);
     }
 

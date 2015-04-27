@@ -1,9 +1,10 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.test
 
 import play.api._
+import play.core.ApplicationProvider
 import play.core.server._
 import scala.util.control.NonFatal
 
@@ -11,16 +12,16 @@ import scala.util.control.NonFatal
  * A test web server.
  *
  * @param port HTTP port to bind on.
- * @param application The FakeApplication to load in this server.
+ * @param application The Application to load in this server.
  * @param sslPort HTTPS port to bind on.
  * @param serverProvider *Experimental API; subject to change* The type of
- * server to use. Defaults to providing a Netty server.
+ * server to use. If not provided, uses Play's default provider.
  */
 case class TestServer(
     port: Int,
     application: Application = FakeApplication(),
     sslPort: Option[Int] = None,
-    serverProvider: ServerProvider = NettyServer.defaultServerProvider) {
+    serverProvider: Option[ServerProvider] = None) {
 
   private var testServerProcess: TestServerProcess = _
 
@@ -66,16 +67,17 @@ object TestServer {
    * call `shutdown` on the returned TestServerProcess.
    */
   private[play] def start(
-    testServerProvider: ServerProvider,
+    testServerProvider: Option[ServerProvider],
     config: ServerConfig,
     application: Application): TestServerProcess = {
     val process = new TestServerProcess
-    val serverStart: ServerStart = new ServerStart {
-      def defaultServerProvider = testServerProvider
+    val serverProvider: ServerProvider = {
+      testServerProvider
+    } getOrElse {
+      ServerProvider.fromConfiguration(process.classLoader, config.configuration)
     }
-    val configuredServerProvider = serverStart.readServerProviderSetting(process)
-    val appProvider = new play.core.TestApplication(application)
-    val server = configuredServerProvider.createServer(config, appProvider)
+    Play.start(application)
+    val server = serverProvider.createServer(config, application)
     process.addShutdownHook { server.stop() }
     process
   }

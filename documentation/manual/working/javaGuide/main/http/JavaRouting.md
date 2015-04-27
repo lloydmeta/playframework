@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # HTTP routing
 
 ## The built-in HTTP router
@@ -42,7 +42,7 @@ You can also add comments to the route file, with the `#` character:
 
 ## The HTTP method
 
-The HTTP method can be any of the valid methods supported by HTTP (`GET`, `POST`, `PUT`, `DELETE`, `HEAD`).
+The HTTP method can be any of the valid methods supported by HTTP (`GET`, `PATCH`, `POST`, `PUT`, `DELETE`, `HEAD`).
 
 ## The URI pattern
 
@@ -108,7 +108,7 @@ Then use the same type for the corresponding action method parameter in the cont
 
 @[clients-show-action](code/javaguide/http/routing/controllers/Clients.java)
 
-> **Note:** The parameter types are specified using a suffix syntax. Also The generic types are specified using the `[]` symbols instead of `<>`, as in Java. For example, `List[String]` is the same type as the Java `List<String>`.
+> **Note:** The parameter types are specified using a suffix syntax. Also, the generic types are specified using the `[]` symbols instead of `<>`, as in Java. For example, `List[String]` is the same type as the Java `List<String>`.
 
 ### Parameters with fixed values
 

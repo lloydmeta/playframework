@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Dependency Injection
 
 Dependency injection is a way that you can separate your components so that they are not directly dependent on each other, rather, they get injected into each other.
@@ -17,6 +17,28 @@ To use constructor injection:
 
 Each of these have their own benefits, and which is best is a matter of hot debate.  For brevity, in the Play documentation, we use field injection, but in Play itself, we use constructor injection.
 
+## Dependency injecting controllers
+
+There are two ways to make Play use dependency injected controllers.
+
+### Injected routes generator
+
+By default, Play will generate a static router, that assumes that all actions are static methods.  By configuring Play to use the injected routes generator, you can get Play to generate a router that will declare all the controllers that it routes to as dependencies, allowing your controllers to be dependency injected themselves.
+
+We recommend always using the injected routes generator, the static routes generator exists primarily as a tool to aid migration so that existing projects don't have to make all their controllers non static at once.
+
+To enable the injected routes generator, add the following to your build settings in `build.sbt`:
+
+@[content](code/injected.sbt)
+
+When using the injected routes generator, prefixing the action with an `@` symbol takes on a special meaning, it means instead of the controller being injected directly, a `Provider` of the controller will be injected.  This allows, for example, prototype controllers, as well as an option for breaking cyclic dependencies.
+
+### Injected actions
+
+If using the static routes generator, you can indicate that an action has an injected controller by prefixing the action with `@`, like so:
+
+@[content](code/javaguide.advanced.di.routes)
+
 ## Singletons
 
 Sometimes you may have a component that holds some state, such as a cache, or a connection to an external resource.  In this case it may be important that there only be one of that component.  This can be achieved using the [@Singleton](http://docs.oracle.com/javaee/6/api/javax/inject/Singleton.html) annotation:
@@ -27,11 +49,8 @@ Sometimes you may have a component that holds some state, such as a cache, or a 
 
 Some components may need to be cleaned up when Play shuts down, for example, to stop thread pools.  Play provides an [ApplicationLifecycle](api/java/play/inject/ApplicationLifecycle.html) component that can be used to register hooks to stop your component when Play shuts down:
 
-Java
-: @[cleanup](code/javaguide/advanced/di/MessageQueueConnection.java)
+@[cleanup](code/javaguide/advanced/di/MessageQueueConnection.java)
 
-Java 8
-: @[cleanup](java8code/java8guide/advanced/di/MessageQueueConnection.java)
 
 The `ApplicationLifecycle` will stop all components in reverse order from when they were created.  This means any components that you depend on can still safely be used in your components stop hook, since because you depend on them, they must have been created before your component was, and therefore won't be stopped until after your component is stopped.
 
@@ -58,9 +77,21 @@ In some more complex situations, you may want to provide more complex bindings, 
 
 @[guice-module](code/javaguide/advanced/di/guice/HelloModule.java)
 
-To register this module with Play, append it's fully qualified class name to the `play.modules.enabled` list in `application.conf`:
+In even more complex situations you might want to access the Play configuration or ClassLoader when you configure Guice bindings. You can get access to these objects by adding them to your module's constructor.
+
+@[dynamic-guice-module](code/javaguide/advanced/di/guice/dynamic/HelloModule.java)
+
+To register either of these HelloWorld modules with Play, append the fully qualified class name to the `play.modules.enabled` list in `application.conf`:
 
     play.modules.enabled += "modules.HelloModule"
+
+You can also provide your own application loader:
+
+@[guice-app-loader](code/javaguide/advanced/di/guice/CustomApplicationLoader.java)
+
+You then need to specifiy it in `play.application.loader`:
+
+    play.application.loader := "modules.CustomApplicationLoader"
 
 ### Play libraries
 
@@ -68,7 +99,7 @@ If you're implementing a library for Play, then you probably want it to be DI fr
 
 To provide bindings, implement a [Module](api/scala/index.html#play.api.inject.Module) to return a sequence of the bindings that you want to provide.  The `Module` trait also provides a DSL for building bindings:
 
-@[play-module](code/javaguide/advanced/di/play/HelloModule.java)
+@[play-module](code/javaguide/advanced/di/playlib/HelloModule.java)
 
 This module can be registered with Play automatically by appending it to the `play.modules.enabled` list in `reference.conf`:
 

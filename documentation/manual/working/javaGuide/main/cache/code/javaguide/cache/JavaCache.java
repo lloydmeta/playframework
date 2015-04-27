@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package javaguide.cache;
 
 import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
+import play.Application;
 import play.cache.CacheApi;
 import play.cache.Cached;
 import play.mvc.*;
-import play.test.FakeApplication;
 import play.test.WithApplication;
 
 import javaguide.testhelpers.MockJavaAction;
@@ -24,8 +24,8 @@ import static play.test.Helpers.*;
 public class JavaCache extends WithApplication {
 
     @Override
-    protected FakeApplication provideFakeApplication() {
-        return fakeApplication(ImmutableMap.of("play.modules.cache.bindCaches", Arrays.asList("session-cache")));
+    protected Application provideApplication() {
+        return fakeApplication(ImmutableMap.of("play.cache.bindCaches", Arrays.asList("session-cache")));
     }
 
     public class News {}
@@ -33,14 +33,14 @@ public class JavaCache extends WithApplication {
     @Test
     public void inject() {
         // Check that we can instantiate it
-        app.getWrappedApplication().injector().instanceOf(javaguide.cache.inject.Application.class);
+        app.injector().instanceOf(javaguide.cache.inject.Application.class);
         // Check that we can instantiate the qualified one
-        app.getWrappedApplication().injector().instanceOf(javaguide.cache.qualified.Application.class);
+        app.injector().instanceOf(javaguide.cache.qualified.Application.class);
     }
 
     @Test
     public void simple() {
-        CacheApi cache = app.getWrappedApplication().injector().instanceOf(CacheApi.class);
+        CacheApi cache = app.injector().instanceOf(CacheApi.class);
 
         News frontPageNews = new News();
         //#simple-set
@@ -55,11 +55,7 @@ public class JavaCache extends WithApplication {
         //#get
         assertThat(news, equalTo(frontPageNews));
         //#get-or-else
-        News maybeCached = cache.getOrElse("item.key", new Callable<News>() {
-            public News call() {
-                return lookUpFrontPageNews();
-            }
-        });
+        News maybeCached = cache.getOrElse("item.key", () -> lookUpFrontPageNews());
         //#get-or-else
         //#remove
         cache.remove("item.key");
@@ -82,7 +78,7 @@ public class JavaCache extends WithApplication {
 
     @Test
     public void http() {
-        CacheApi cache = app.getWrappedApplication().injector().instanceOf(CacheApi.class);
+        CacheApi cache = app.injector().instanceOf(CacheApi.class);
 
         assertThat(contentAsString(MockJavaActionHelper.call(new Controller1(), fakeRequest())), equalTo("Hello world"));
         assertThat(cache.get("homePage"), notNullValue());

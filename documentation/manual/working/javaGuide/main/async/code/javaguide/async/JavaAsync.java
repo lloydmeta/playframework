@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package javaguide.async;
 
@@ -20,27 +20,17 @@ public class JavaAsync {
     public void promisePi() {
         //#promise-pi
         Promise<Double> promiseOfPIValue = computePIAsynchronously();
-        Promise<Result> promiseOfResult = promiseOfPIValue.map(
-          new Function<Double,Result>() {
-            public Result apply(Double pi) {
-              return ok("PI value computed: " + pi);
-            }
-          }
+        Promise<Result> promiseOfResult = promiseOfPIValue.map(pi ->
+                        ok("PI value computed: " + pi)
         );
         //#promise-pi
-        assertThat(status(promiseOfResult.get(1000)), equalTo(200));
+        assertThat(promiseOfResult.get(1000).status(), equalTo(200));
     }
 
     @Test
     public void promiseAsync() {
         //#promise-async
-        Promise<Integer> promiseOfInt = Promise.promise(
-          new Function0<Integer>() {
-            public Integer apply() {
-              return intensiveComputation();
-            }
-          }
-        );
+        Promise<Integer> promiseOfInt = Promise.promise(() -> intensiveComputation());
         //#promise-async
         assertEquals(intensiveComputation(), promiseOfInt.get(1000));
     }

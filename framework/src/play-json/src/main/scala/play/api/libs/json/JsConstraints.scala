@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.json
 
@@ -204,7 +204,7 @@ trait ConstraintWrites {
     Writes[JsValue] { js => wrs.writes(fixed) }
 
   def pruned[A](implicit w: Writes[A]): Writes[A] = new Writes[A] {
-    def writes(a: A): JsValue = JsUndefined("pruned")
+    def writes(a: A): JsValue = JsNull
   }
 
   def list[A](implicit writes: Writes[A]): Writes[List[A]] = Writes.traversableWrites[A]

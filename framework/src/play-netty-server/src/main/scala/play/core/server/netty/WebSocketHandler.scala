@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.core.server.netty
 
@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
 private[server] trait WebSocketHandler {
 
   import NettyFuture._
+  import WebSocketHandler._
 
   val WebSocketNormalClose = 1000
   val WebSocketUnacceptable = 1003
@@ -109,6 +110,9 @@ private[server] trait WebSocketHandler {
             case (frame: PingWebSocketFrame, _) =>
               ctx.getChannel.write(new PongWebSocketFrame(frame.getBinaryData))
 
+            // pong!
+            case (frame: PongWebSocketFrame, _) => // ignore
+
             // unacceptable frame
             case (frame: WebSocketFrame, _) =>
               closeWebSocket(ctx, WebSocketUnacceptable, "This WebSocket does not handle frames of that type")
@@ -124,12 +128,12 @@ private[server] trait WebSocketHandler {
 
         override def channelDisconnected(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
           enumerator.frameReceived(ctx, EOF)
-          Play.logger.trace("disconnected socket")
+          logger.trace("disconnected socket")
         }
 
         private def closeWebSocket(ctx: ChannelHandlerContext, status: Int, reason: String): Unit = {
           if (!reason.isEmpty) {
-            Logger.trace("Closing WebSocket because " + reason)
+            logger.trace("Closing WebSocket because " + reason)
           }
           if (ctx.getChannel.isOpen) {
             for {
@@ -244,4 +248,8 @@ private[server] trait WebSocketHandler {
     def getHeader(header: String) = req.headers().get(header)
   }
 
+}
+
+object WebSocketHandler {
+  private val logger = Logger(classOf[WebSocketHandler])
 }

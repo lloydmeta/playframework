@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # JSON Macro Inception
 
 > Please note this documentation was initially published as an article by Pascal Voitot ([@mandubian](https://github.com/mandubian)) on [mandubian.com](http://mandubian.com/2012/11/11/JSON-inception/)
@@ -182,7 +182,7 @@ Great power means greater responsability so it's better to discuss all together 
 
 >Please remark that JSON inception just works for structures having `unapply/apply` functions with corresponding input/output types.
 
-Naturally, you can also _incept_ `Writes[T]`and `Format[T]`.
+Naturally, you can also _incept_ `Writes[T]` and `Format[T]`.
 
 ## <a name="writes">Writes[T]</a>
 

@@ -1,11 +1,11 @@
-// Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+// Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
 
 buildInfoSettings
 
 sourceGenerators in Compile <+= buildInfo
 
-val sbtNativePackagerVersion = "0.7.6"
-val sbtTwirlVersion = "1.0.3"
+val sbtNativePackagerVersion = "1.0.0"
+val sbtTwirlVersion = "1.0.4"
 
 buildInfoKeys := Seq[BuildInfoKey](
   "sbtNativePackagerVersion" -> sbtNativePackagerVersion,
@@ -15,6 +15,8 @@ buildInfoKeys := Seq[BuildInfoKey](
 logLevel := Level.Warn
 
 scalacOptions ++= Seq("-deprecation", "-language:_")
+
+addSbtPlugin("com.typesafe.play" % "interplay" % "0.1.0")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-twirl" % sbtTwirlVersion)
 
@@ -34,3 +36,7 @@ libraryDependencies ++= Seq(
 resolvers += Resolver.typesafeRepo("maven-releases")
 
 libraryDependencies += "org.scalariform" %% "scalariform" % "0.1.5-20140822-69e2e30"
+
+addSbtPlugin("com.eed3si9n" % "sbt-doge" % "0.1.5")
+
+addSbtPlugin("com.jsuereth" % "sbt-pgp" % "1.0.0")

@@ -1,10 +1,9 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.libs;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.apache.commons.lang3.StringEscapeUtils;
 import play.mvc.Results.*;
 
 /**
@@ -74,6 +73,8 @@ public abstract class EventSource extends Chunks<String> {
      */
     static final class WhenConnectedEventSource extends EventSource {
 
+        private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(WhenConnectedEventSource.class);
+
         private final F.Callback<EventSource> callback;
 
         WhenConnectedEventSource(F.Callback<EventSource> callback) {
@@ -87,7 +88,7 @@ public abstract class EventSource extends Chunks<String> {
             try {
                 callback.invoke(this);
             } catch (Throwable e) {
-                play.PlayInternal.logger().error("Exception in EventSource.onConnected", e);
+                logger.error("Exception in EventSource.onConnected", e);
             }
         }
     }

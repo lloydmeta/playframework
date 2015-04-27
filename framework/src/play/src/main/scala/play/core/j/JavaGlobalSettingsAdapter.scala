@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.core.j
 
@@ -27,7 +27,7 @@ class JavaGlobalSettingsAdapter(val underlying: play.GlobalSettings) extends Glo
   }
 
   override def onRouteRequest(request: RequestHeader): Option[Handler] = {
-    val r = JavaHelpers.createJavaRequest(request)
+    val r = new play.mvc.Http.RequestImpl(request)
     Option(underlying.onRouteRequest(r)).map(Some(_)).getOrElse(super.onRouteRequest(request))
   }
 

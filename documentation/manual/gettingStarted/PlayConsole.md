@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Using the Play console
 
 ## Launching the console
@@ -50,6 +50,14 @@ In Play you can also compile your application without running the server. Just u
 
 [[images/consoleCompile.png]]
 
+## Running the tests
+
+Like the commands above, you can run your tests without running the server. Just use the `test` command:
+
+```bash
+[my-first-app] $ test
+```
+
 ## Launch the interactive console
 
 Type `console` to enter the interactive Scala console, which allows you to test your code interactively:
@@ -58,7 +66,7 @@ Type `console` to enter the interactive Scala console, which allows you to test 
 [my-first-app] $ console
 ```
 
-To start application inside scala console (e.g to access database):
+To start application inside scala console (e.g. to access database):
 ```bash
 scala> new play.core.StaticApplication(new java.io.File("."))
 ```
@@ -121,4 +129,8 @@ $ activator run
 (Server started, use Ctrl+D to stop and go back to the console...)
 ```
 
-The application starts directly. When you quit the server using `Ctrl+D`, you will come back to your OS prompt.
+The application starts directly. When you quit the server using `Ctrl+D`, you will come back to your OS prompt. Of course, the **triggered execution** is available here as well:
+
+```bash
+$ activator ~run
+```

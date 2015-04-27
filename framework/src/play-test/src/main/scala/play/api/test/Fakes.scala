@@ -1,22 +1,20 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.test
 
 import javax.inject.{ Inject, Provider }
 
+import akka.actor.ActorSystem
 import play.api._
 import play.api.http._
-import play.api.inject.guice.GuiceApplicationLoader
+import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.inject._
-import play.api.libs.{ Crypto, CryptoConfigParser, CryptoConfig }
 import play.api.mvc._
 import play.api.libs.json.JsValue
-import play.core.{ DefaultWebCommands, WebCommands }
-import play.utils.{ Reflect, Threads }
+import play.api.routing.Router
 import scala.concurrent.Future
 import xml.NodeSeq
-import play.core.Router
 import scala.runtime.AbstractPartialFunction
 import play.api.libs.Files.TemporaryFile
 
@@ -25,7 +23,7 @@ import play.api.libs.Files.TemporaryFile
  *
  * @param data Headers data.
  */
-case class FakeHeaders(override val data: Seq[(String, Seq[String])] = Seq.empty) extends Headers
+case class FakeHeaders(data: Seq[(String, String)] = Seq.empty) extends Headers(data)
 
 /**
  * Fake HTTP request implementation.
@@ -37,7 +35,7 @@ case class FakeHeaders(override val data: Seq[(String, Seq[String])] = Seq.empty
  * @param body The request body.
  * @param remoteAddress The client IP.
  */
-case class FakeRequest[A](method: String, uri: String, headers: FakeHeaders, body: A, remoteAddress: String = "127.0.0.1", version: String = "HTTP/1.1", id: Long = 666, tags: Map[String, String] = Map.empty[String, String], secure: Boolean = false) extends Request[A] {
+case class FakeRequest[A](method: String, uri: String, headers: Headers, body: A, remoteAddress: String = "127.0.0.1", version: String = "HTTP/1.1", id: Long = 666, tags: Map[String, String] = Map.empty[String, String], secure: Boolean = false) extends Request[A] {
 
   private def _copy[B](
     id: Long = this.id,
@@ -46,7 +44,7 @@ case class FakeRequest[A](method: String, uri: String, headers: FakeHeaders, bod
     path: String = this.path,
     method: String = this.method,
     version: String = this.version,
-    headers: FakeHeaders = this.headers,
+    headers: Headers = this.headers,
     remoteAddress: String = this.remoteAddress,
     secure: Boolean = this.secure,
     body: B = this.body): FakeRequest[B] = {
@@ -70,12 +68,7 @@ case class FakeRequest[A](method: String, uri: String, headers: FakeHeaders, bod
    * Constructs a new request with additional headers. Any existing headers of the same name will be replaced.
    */
   def withHeaders(newHeaders: (String, String)*): FakeRequest[A] = {
-    _copy(headers = FakeHeaders({
-      val newData = newHeaders.map {
-        case (k, v) => (k, Seq(v))
-      }
-      (Map() ++ (headers.data ++ newData)).toSeq
-    }))
+    _copy(headers = headers.replace(newHeaders: _*))
   }
 
   /**
@@ -190,6 +183,7 @@ object FakeRequest {
   }
 }
 
+import play.api.Application
 /**
  * A Fake application.
  *
@@ -200,67 +194,49 @@ object FakeRequest {
  * @param additionalConfiguration Additional configuration
  * @param withRoutes A partial function of method name and path to a handler for handling the request
  */
-
-import play.api.Application
 case class FakeApplication(
     override val path: java.io.File = new java.io.File("."),
     override val classloader: ClassLoader = classOf[FakeApplication].getClassLoader,
-    val additionalPlugins: Seq[String] = Nil,
-    val withoutPlugins: Seq[String] = Nil,
-    val additionalConfiguration: Map[String, _ <: Any] = Map.empty,
-    val withGlobal: Option[play.api.GlobalSettings] = None,
-    val withRoutes: PartialFunction[(String, String), Handler] = PartialFunction.empty) extends Application {
+    additionalPlugins: Seq[String] = Nil,
+    withoutPlugins: Seq[String] = Nil,
+    additionalConfiguration: Map[String, _ <: Any] = Map.empty,
+    withGlobal: Option[play.api.GlobalSettings] = None,
+    withRoutes: PartialFunction[(String, String), Handler] = PartialFunction.empty) extends Application {
 
-  private val environment = Environment(path, classloader, Mode.Test)
-  private val initialConfiguration = Threads.withContextClassLoader(environment.classLoader) {
-    Configuration.load(environment.rootPath, environment.mode)
-  }
-  override val global = withGlobal.getOrElse(GlobalSettings(initialConfiguration, environment))
-  private val config =
-    global.onLoadConfig(initialConfiguration, path, classloader, environment.mode) ++
-      play.api.Configuration.from(additionalConfiguration)
+  private val app: Application = new GuiceApplicationBuilder()
+    .in(Environment(path, classloader, Mode.Test))
+    .global(withGlobal.orNull)
+    .configure(additionalConfiguration)
+    .bindings(
+      bind[FakePluginsConfig] to FakePluginsConfig(additionalPlugins, withoutPlugins),
+      bind[FakeRouterConfig] to FakeRouterConfig(withRoutes))
+    .overrides(
+      bind[Plugins].toProvider[FakePluginsProvider],
+      bind[Router].toProvider[FakeRouterProvider])
+    .build
 
-  Logger.configure(environment, configuration)
-
-  val applicationLifecycle = new DefaultApplicationLifecycle
-
-  override val injector = {
-    // Load all modules, and filter out the built in module
-    val modules = Modules.locate(environment, configuration)
-      .filterNot(_.getClass == classOf[BuiltinModule])
-    val webCommands = new DefaultWebCommands
-
-    val loader = config.getString("play.application.loader").fold[ApplicationLoader](
-      new GuiceApplicationLoader
-    ) { className =>
-        Reflect.createInstance[ApplicationLoader](className, classloader)
-      }
-
-    loader.createInjector(environment, configuration,
-      modules :+ new FakeBuiltinModule(environment, configuration, this, global, applicationLifecycle, webCommands, withRoutes)
-    ).getOrElse(NewInstanceInjector)
-  }
-
-  def configuration = config
-
-  def mode = environment.mode
-
-  def stop() = applicationLifecycle.stop()
-
-  override val errorHandler = injector.instanceOf[HttpErrorHandler]
-
-  override val plugins = {
-    Plugins.loadPlugins(
-      additionalPlugins ++ Plugins.loadPluginClassNames(environment).diff(withoutPlugins),
-      environment, injector
-    )
-  }
-
-  override lazy val requestHandler = injector.instanceOf[HttpRequestHandler]
+  override def mode: Mode.Mode = app.mode
+  override def global: GlobalSettings = app.global
+  override def configuration: Configuration = app.configuration
+  override def actorSystem: ActorSystem = app.actorSystem
+  override def plugins: Seq[Plugin.Deprecated] = app.plugins
+  override def requestHandler: HttpRequestHandler = app.requestHandler
+  override def errorHandler: HttpErrorHandler = app.errorHandler
+  override def stop(): Future[Unit] = app.stop()
+  override def injector: Injector = app.injector
 }
 
-private class FakeRoutes(override val errorHandler: HttpErrorHandler,
-    injected: PartialFunction[(String, String), Handler], fallback: Router.Routes) extends Router.Routes {
+private case class FakePluginsConfig(additionalPlugins: Seq[String], withoutPlugins: Seq[String])
+
+private class FakePluginsProvider @Inject() (config: FakePluginsConfig, environment: Environment, injector: Injector) extends Provider[Plugins] {
+  lazy val get: Plugins = {
+    val pluginClasses = config.additionalPlugins ++ Plugins.loadPluginClassNames(environment).diff(config.withoutPlugins)
+    new Plugins(Plugins.loadPlugins(pluginClasses, environment, injector).toIndexedSeq)
+  }
+}
+
+private class FakeRoutes(
+    injected: PartialFunction[(String, String), Handler], fallback: Router) extends Router {
   def documentation = fallback.documentation
   // Use withRoutes first, then delegate to the parentRoutes if no route is defined
   val routes = new AbstractPartialFunction[RequestHeader, Handler] {
@@ -273,40 +249,12 @@ private class FakeRoutes(override val errorHandler: HttpErrorHandler,
     def isDefinedAt(x: RequestHeader) = fallback.routes.isDefinedAt(x)
   }
   def withPrefix(prefix: String) = {
-    new FakeRoutes(errorHandler, injected, fallback.withPrefix(prefix))
+    new FakeRoutes(injected, fallback.withPrefix(prefix))
   }
 }
 
-private class FakeBuiltinModule(environment: Environment,
-    configuration: Configuration,
-    app: Application,
-    global: GlobalSettings,
-    appLifecycle: ApplicationLifecycle,
-    webCommands: WebCommands,
-    withRoutes: PartialFunction[(String, String), Handler]) extends Module {
-  def bindings(environment: Environment, configuration: Configuration) = Seq(
-    bind[Environment] to environment,
-    bind[Configuration] to configuration,
-    bind[HttpConfiguration].toProvider[HttpConfiguration.HttpConfigurationProvider],
-    bind[Application] to app,
-    bind[GlobalSettings] to global,
-    bind[ApplicationLifecycle] to appLifecycle,
-    bind[WebCommands] to webCommands,
-    bind[OptionalSourceMapper] to new OptionalSourceMapper(None),
-    bind[play.inject.Injector].to[play.inject.DelegateInjector],
-    bind[CryptoConfig].toProvider[CryptoConfigParser],
-    bind[Crypto].toSelf,
-    bind[Router.Routes].to(new FakeRoutesProvider(withRoutes))
-  ) ++ HttpErrorHandler.bindingsFromConfiguration(environment, configuration) ++
-    HttpFilters.bindingsFromConfiguration(environment, configuration) ++
-    HttpRequestHandler.bindingsFromConfiguration(environment, configuration)
-}
+private case class FakeRouterConfig(withRoutes: PartialFunction[(String, String), Handler])
 
-private class FakeRoutesProvider(withRoutes: PartialFunction[(String, String), Handler]) extends Provider[Router.Routes] {
-  @Inject
-  var injector: Injector = _
-  lazy val get = {
-    val parent = injector.instanceOf[RoutesProvider].get
-    new FakeRoutes(injector.instanceOf[HttpErrorHandler], withRoutes, parent)
-  }
+private class FakeRouterProvider @Inject() (config: FakeRouterConfig, parent: RoutesProvider) extends Provider[Router] {
+  lazy val get: Router = new FakeRoutes(config.withRoutes, parent.get)
 }

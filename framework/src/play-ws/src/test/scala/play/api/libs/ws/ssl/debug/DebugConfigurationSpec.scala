@@ -1,14 +1,20 @@
 /*
  *
- *  * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ *  * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  *
  */
 package play.api.libs.ws.ssl.debug
 
-import org.specs2.mutable._
+import org.specs2.mutable.Specification
+import org.specs2.specification.After
 import play.api.libs.ws.ssl.SSLDebugConfig
 
-object DebugConfigurationSpec extends Specification {
+object DebugConfigurationSpec extends Specification with After {
+
+  def after = {
+    System.clearProperty("java.security.debug")
+    System.clearProperty("javax.net.debug")
+  }
 
   sequential // global settings, must be sequential
 
@@ -28,7 +34,7 @@ object DebugConfigurationSpec extends Specification {
       //setLoggerDebug(certpathDebugLogger)
 
       Option(System.getProperty("java.security.debug")) must beLike {
-        case Some(value) => value must be empty
+        case Some(value) => value must beEmpty
         case None => ok
       }
 
@@ -37,8 +43,6 @@ object DebugConfigurationSpec extends Specification {
       config.configure(debugConfig)
 
       System.getProperty("java.security.debug") must contain("certpath")
-    }.after {
-      System.clearProperty("java.security.debug")
     }
 
     "turn off java.security.debug code" in {
@@ -49,15 +53,13 @@ object DebugConfigurationSpec extends Specification {
       config.configure(debugConfig)
 
       System.getProperty("java.security.debug") must not contain ("certpath")
-    }.after {
-      System.clearProperty("java.security.debug")
     }
 
     "turn on javax.ssl.debug code" in {
       //setLoggerDebug(internalDebugLogger)
 
       Option(System.getProperty("javax.net.debug")) must beLike {
-        case Some(value) => value must be empty
+        case Some(value) => value must beEmpty
         case None => ok
       }
 
@@ -66,8 +68,6 @@ object DebugConfigurationSpec extends Specification {
       config.configure(debugConfig)
 
       System.getProperty("javax.net.debug") must contain("ssl")
-    }.after {
-      System.clearProperty("javax.net.debug")
     }
 
     "turn off javax.ssl.debug code" in {
@@ -78,8 +78,6 @@ object DebugConfigurationSpec extends Specification {
       config.configure(debugConfig)
 
       System.getProperty("javax.net.debug") must not contain ("ssl")
-    }.after {
-      System.clearProperty("javax.net.debug")
     }
   }
 

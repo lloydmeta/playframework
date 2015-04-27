@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Handling form submission
 
 ## Overview
@@ -150,7 +150,7 @@ There are several input helpers, but the most helpful are:
 * [`select`](api/scala/index.html#views.html.helper.select$): renders a [select](http://www.w3.org/TR/html-markup/select.html#select) element.
 * [`textarea`](api/scala/index.html#views.html.helper.textarea$): renders a [textarea](http://www.w3.org/TR/html-markup/textarea.html#textarea) element.
 * [`checkbox`](api/scala/index.html#views.html.helper.checkbox$): renders a [checkbox](http://www.w3.org/TR/html-markup/input.checkbox.html#input.checkbox) element.
-* [`input`](api/scala/index.html#views.html.helper.input): renders a generic input element (which requires explicit arguments).
+* [`input`](api/scala/index.html#views.html.helper.input$): renders a generic input element (which requires explicit arguments).
 
 As with the `form` helper, you can specify an extra set of parameters that will be added to the generated Html:
 
@@ -247,9 +247,9 @@ A form mapping can define repeated values using [`Forms.list`](api/scala/index.h
 
 @[userForm-repeated](code/ScalaForms.scala)
 
-When you are using repeated data like this, the form values sent by the browser must be named `emails[0]`, `emails[1]`, `emails[2]`, etc.
+When you are using repeated data like this, there are two alternatives for sending the form values in the HTTP request.  First, you can suffix the parameter with an empty bracket pair, as in "emails[]".  This parameter can then be repeated in the standard way, as in `http://foo.com/request?emails[]=a@b.com&emails[]=c@d.com`.  Alternatively, the client can explicitly name the parameters uniquely with array subscripts, as in `emails[0]`, `emails[1]`, `emails[2]`, and so on.  This approach also allows you to maintain the order of a sequence of inputs.  
 
-Now you have to generate as many inputs for the `emails` field as the form contains, using the [`repeat`](api/scala/index.html#views.html.helper.repeat$) helper:
+If you are using Play to generate your form HTML, you can generate as many inputs for the `emails` field as the form contains, using the [`repeat`](api/scala/index.html#views.html.helper.repeat$) helper:
 
 @[form-field-repeat](code/scalaguide/forms/scalaforms/views/repeat.scala.html)
 

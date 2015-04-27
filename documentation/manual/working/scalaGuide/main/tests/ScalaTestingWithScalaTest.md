@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Testing your application with ScalaTest
 
 Writing tests for your application can be an involved process. Play provides helpers and application stubs, and ScalaTest provides an integration library, [ScalaTest + Play](http://scalatest.org/plus/play), to make testing your application as easy as possible.
@@ -37,11 +37,6 @@ In [_ScalaTest + Play_](http://scalatest.org/plus/play), you define test classes
 You can alternatively [define your own base classes](http://scalatest.org/user_guide/defining_base_classes) instead of using `PlaySpec`.
 
 You can run your tests with Play itself, or in IntelliJ IDEA (using the [Scala plugin](http://blog.jetbrains.com/scala/)) or in Eclipse (using the [Scala IDE](http://scala-ide.org/) and the [ScalaTest Eclipse plugin](http://scalatest.org/user_guide/using_scalatest_with_eclipse)).  Please see the [[IDE page|IDE]] for more details.
-
-Note that in IntelliJ, when creating a new Run Configuration for your unit tests,
-if you select "All in package," choosing "In whole project" for the "Search for tests"
-option, may cause `MethodNotFoundError` exceptions: if that's the case, use "Across module
-dependencies" instead.
 
 ### Matchers
 
@@ -134,6 +129,3 @@ Testing [`Action`](api/scala/index.html#play.api.mvc.Action) or [`Filter`](api/s
 For this, the test [`Helpers.call`](api/scala/index.html#play.api.test.Helpers@call) can be used like that:
 
 @[scalatest-exampleessentialactionspec](code-scalatestplus-play/ExampleEssentialActionSpec.scala)
-
-
-> **Next:** [[Writing functional tests with ScalaTest|ScalaFunctionalTestingWithScalaTest]]

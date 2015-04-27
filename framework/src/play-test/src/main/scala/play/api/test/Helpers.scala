@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.test
 
@@ -27,13 +27,7 @@ import akka.util.Timeout
 /**
  * Helper functions to run tests.
  */
-trait PlayRunners {
-
-  val GET = "GET"
-  val POST = "POST"
-  val PUT = "PUT"
-  val DELETE = "DELETE"
-  val HEAD = "HEAD"
+trait PlayRunners extends HttpVerbs {
 
   val HTMLUNIT = classOf[HtmlUnitDriver]
   val FIREFOX = classOf[FirefoxDriver]
@@ -120,6 +114,7 @@ object PlayRunners {
 }
 
 trait Writeables {
+  import play.api.libs.iteratee.Execution.Implicits.trampoline
   implicit def writeableOf_AnyContentAsJson(implicit codec: Codec): Writeable[AnyContentAsJson] =
     Writeable.writeableOf_JsValue.map(c => c.json)
 
@@ -192,7 +187,7 @@ trait EssentialActionCaller {
    *
    * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
    */
-  def call[T](action: EssentialAction, req: FakeRequest[T])(implicit w: Writeable[T]): Future[Result] =
+  def call[T](action: EssentialAction, req: Request[T])(implicit w: Writeable[T]): Future[Result] =
     call(action, req, req.body)
 
   /**
@@ -204,7 +199,7 @@ trait EssentialActionCaller {
     import play.api.http.HeaderNames._
     val newContentType = rh.headers.get(CONTENT_TYPE).fold(w.contentType)(_ => None)
     val rhWithCt = newContentType.map { ct =>
-      rh.copy(headers = FakeHeaders((rh.headers.toMap + (CONTENT_TYPE -> Seq(ct))).toSeq))
+      rh.copy(headers = rh.headers.replace(CONTENT_TYPE -> ct))
     }.getOrElse(rh)
 
     val requestBody = Enumerator(body) &> w.toEnumeratee
@@ -216,11 +211,8 @@ trait RouteInvokers extends EssentialActionCaller {
   self: Writeables =>
 
   // Java compatibility
-  def jRoute(app: Application, rh: RequestHeader): Option[Future[Result]] = route(app, rh, AnyContentAsEmpty)
-  def jRoute(app: Application, rh: RequestHeader, body: Array[Byte]): Option[Future[Result]] = route(app, rh, body)(Writeable.wBytes)
-  def jRoute(rh: RequestHeader, body: Array[Byte]): Option[Future[Result]] = jRoute(Play.current, rh, body)
-  def jRoute[T](app: Application, r: FakeRequest[T]): Option[Future[Result]] = {
-    (r.body: @unchecked) match {
+  def jRoute[T](app: Application, r: RequestHeader, body: T): Option[Future[Result]] = {
+    (body: @unchecked) match {
       case body: AnyContentAsFormUrlEncoded => route(app, r, body)
       case body: AnyContentAsJson => route(app, r, body)
       case body: AnyContentAsXml => route(app, r, body)
@@ -232,41 +224,35 @@ trait RouteInvokers extends EssentialActionCaller {
   }
 
   /**
-   * Use the Router to determine the Action to call for this request and execute it.
+   * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
    *
    * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
    */
   def route[T](app: Application, rh: RequestHeader, body: T)(implicit w: Writeable[T]): Option[Future[Result]] = {
-    val handler = app.global.onRouteRequest(rh)
-    val taggedRh = handler.map({
-      case h: RequestTaggingHandler => h.tagRequest(rh)
-      case _ => rh
-    }).getOrElse(rh)
-    handler.flatMap {
+    val (taggedRh, handler) = app.requestHandler.handlerForRequest(rh)
+    handler match {
       case a: EssentialAction =>
-        val filteredAction = app.global.doFilter(a)
-        Some(call(filteredAction, taggedRh, body))
-
+        Some(call(a, taggedRh, body))
       case _ => None
     }
   }
 
   /**
-   * Use the Router to determine the Action to call for this request and execute it.
+   * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
    *
    * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
    */
   def route[T](rh: RequestHeader, body: T)(implicit w: Writeable[T]): Option[Future[Result]] = route(Play.current, rh, body)
 
   /**
-   * Use the Router to determine the Action to call for this request and execute it.
+   * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
    *
    * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
    */
   def route[T](app: Application, req: Request[T])(implicit w: Writeable[T]): Option[Future[Result]] = route(app, req, req.body)
 
   /**
-   * Use the Router to determine the Action to call for this request and execute it.
+   * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
    *
    * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
    */
@@ -356,11 +342,11 @@ trait ResultExtractors {
    * Extracts the Location header of this Result value if this Result is a Redirect.
    */
   def redirectLocation(of: Future[Result])(implicit timeout: Timeout): Option[String] = Await.result(of, timeout.duration).header match {
-    case ResponseHeader(FOUND, headers) => headers.get(LOCATION)
-    case ResponseHeader(SEE_OTHER, headers) => headers.get(LOCATION)
-    case ResponseHeader(TEMPORARY_REDIRECT, headers) => headers.get(LOCATION)
-    case ResponseHeader(MOVED_PERMANENTLY, headers) => headers.get(LOCATION)
-    case ResponseHeader(_, _) => None
+    case ResponseHeader(FOUND, headers, _) => headers.get(LOCATION)
+    case ResponseHeader(SEE_OTHER, headers, _) => headers.get(LOCATION)
+    case ResponseHeader(TEMPORARY_REDIRECT, headers, _) => headers.get(LOCATION)
+    case ResponseHeader(MOVED_PERMANENTLY, headers, _) => headers.get(LOCATION)
+    case ResponseHeader(_, _, _) => None
   }
 
   /**

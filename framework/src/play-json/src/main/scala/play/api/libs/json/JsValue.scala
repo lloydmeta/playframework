@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.json
 
 import java.io.InputStream
-import scala.annotation.tailrec
+import scala.annotation.{ switch, tailrec }
 import scala.collection._
 import scala.collection.mutable.ListBuffer
 
-import com.fasterxml.jackson.core.{ JsonGenerator, JsonToken, JsonParser }
+import com.fasterxml.jackson.core.{ JsonTokenId, JsonGenerator, JsonParser }
 import com.fasterxml.jackson.databind._
 import com.fasterxml.jackson.databind.`type`.TypeFactory
 import com.fasterxml.jackson.databind.deser.Deserializers
@@ -21,89 +21,21 @@ case class JsResultException(errors: Seq[(JsPath, Seq[ValidationError])]) extend
 /**
  * Generic json value
  */
-sealed trait JsValue {
-
-  /**
-   * Return the property corresponding to the fieldName, supposing we have a JsObject.
-   *
-   * @param fieldName the name of the property to lookup
-   * @return the resulting JsValue. If the current node is not a JsObject or doesn't have the property, a JsUndefined will be returned.
-   */
-  def \(fieldName: String): JsValue = JsUndefined("'" + fieldName + "'" + " is undefined on object: " + this)
-
-  /**
-   * Return the element at a given index, supposing we have a JsArray.
-   *
-   * @param idx the index to lookup
-   * @return the resulting JsValue. If the current node is not a JsArray or the index is out of bounds, a JsUndefined will be returned.
-   */
-  def apply(idx: Int): JsValue = JsUndefined(this.toString + " is not an array")
-
-  /**
-   * Lookup for fieldName in the current object and all descendants.
-   *
-   * @return the list of matching nodes
-   */
-  def \\(fieldName: String): Seq[JsValue] = Nil
-
-  /**
-   * Tries to convert the node into a T. An implicit Reads[T] must be defined.
-   * Any error is mapped to None
-   *
-   * @return Some[T] if it succeeds, None if it fails.
-   */
-  def asOpt[T](implicit fjs: Reads[T]): Option[T] = fjs.reads(this).fold(
-    invalid = _ => None,
-    valid = v => Some(v)
-  ).filter {
-      case JsUndefined() => false
-      case _ => true
-    }
-
-  /**
-   * Tries to convert the node into a T, throwing an exception if it can't. An implicit Reads[T] must be defined.
-   */
-  def as[T](implicit fjs: Reads[T]): T = fjs.reads(this).fold(
-    valid = identity,
-    invalid = e => throw new JsResultException(e)
-  )
-
-  /**
-   * Tries to convert the node into a JsResult[T] (Success or Error). An implicit Reads[T] must be defined.
-   */
-  def validate[T](implicit rds: Reads[T]): JsResult[T] = rds.reads(this)
-
-  /**
-   * Transforms a JsValue into another JsValue using provided Json transformer Reads[JsValue]
-   */
-  def transform[A <: JsValue](rds: Reads[A]): JsResult[A] = rds.reads(this)
-
+sealed trait JsValue extends JsReadable {
   override def toString = Json.stringify(this)
 
-  /**
-   * Prune the Json AST according to the provided JsPath
-   */
-  //def prune(path: JsPath): JsValue = path.prune(this)
+  def validate[A](implicit rds: Reads[A]) = rds.reads(this)
+}
 
+object JsValue {
+  import scala.language.implicitConversions
+  implicit def jsValueToJsLookup(value: JsValue): JsLookup = JsLookup(JsDefined(value))
 }
 
 /**
  * Represents a Json null value.
  */
 case object JsNull extends JsValue
-
-/**
- * Represent a missing Json value.
- */
-class JsUndefined(err: => String) extends JsValue {
-  def error = err
-  override def toString = "JsUndefined(" + err + ")"
-}
-
-object JsUndefined {
-  def apply(err: => String) = new JsUndefined(err)
-  def unapply(o: Object): Boolean = o.isInstanceOf[JsUndefined]
-}
 
 /**
  * Represent a Json boolean value.
@@ -124,22 +56,6 @@ case class JsString(value: String) extends JsValue
  * Represent a Json array value.
  */
 case class JsArray(value: Seq[JsValue] = List()) extends JsValue {
-
-  /**
-   * Access a value of this array.
-   *
-   * @param index Element index.
-   */
-  override def apply(index: Int): JsValue = {
-    value.lift(index).getOrElse(JsUndefined("Array index out of bounds in " + this))
-  }
-
-  /**
-   * Lookup for fieldName in the current object and all descendants.
-   *
-   * @return the list of matching nodes
-   */
-  override def \\(fieldName: String): Seq[JsValue] = value.flatMap(_ \\ fieldName)
 
   /**
    * Concatenates this array with the elements of an other array.
@@ -164,147 +80,106 @@ case class JsArray(value: Seq[JsValue] = List()) extends JsValue {
 /**
  * Represent a Json object value.
  */
-case class JsObject(fields: Seq[(String, JsValue)]) extends JsValue {
-
-  lazy val value: Map[String, JsValue] = fields.toMap
+case class JsObject(private val underlying: Map[String, JsValue]) extends JsValue {
 
   /**
-   * Return the property corresponding to the fieldName, supposing we have a JsObject.
-   *
-   * @param fieldName the name of the property to lookup
-   * @return the resulting JsValue. If the current node is not a JsObject or doesn't have the property, a JsUndefined will be returned.
+   * The fields of this JsObject in the order passed to to constructor
    */
-  override def \(fieldName: String): JsValue = value.get(fieldName).getOrElse(super.\(fieldName))
+  lazy val fields: Seq[(String, JsValue)] = underlying.toSeq
 
   /**
-   * Lookup for fieldName in the current object and all descendants.
-   *
-   * @return the list of matching nodes
+   * The value of this JsObject as an immutable map.
    */
-  override def \\(fieldName: String): Seq[JsValue] = {
-    value.foldLeft(Seq[JsValue]())((o, pair) => pair match {
-      case (key, value) if key == fieldName => o ++ (value +: (value \\ fieldName))
-      case (_, value) => o ++ (value \\ fieldName)
-    })
+  lazy val value: Map[String, JsValue] = underlying match {
+    case m: immutable.Map[String, JsValue] => m
+    case m => m.toMap
   }
+
+  /**
+   * Return all fields as a set
+   */
+  def fieldSet: Set[(String, JsValue)] = fields.toSet
 
   /**
    * Return all keys
    */
-  def keys: Set[String] = fields.map(_._1).toSet
+  def keys: Set[String] = underlying.keySet
 
   /**
    * Return all values
    */
-  def values: Set[JsValue] = fields.map(_._2).toSet
-
-  def fieldSet: Set[(String, JsValue)] = fields.toSet
+  def values: Iterable[JsValue] = underlying.values
 
   /**
-   * Merge this object with an other one. Values from other override value of the current object.
+   * Merge this object with another one. Values from other override value of the current object.
    */
-  def ++(other: JsObject): JsObject =
-    JsObject(fields.filterNot(field => other.keys(field._1)) ++ other.fields)
+  def ++(other: JsObject): JsObject = JsObject(underlying ++ other.underlying)
 
   /**
-   * removes one field from JsObject
+   * Removes one field from the JsObject
    */
-  def -(otherField: String): JsObject =
-    JsObject(fields.filterNot(_._1 == otherField))
+  def -(otherField: String): JsObject = JsObject(underlying - otherField)
 
   /**
-   * adds one field from JsObject
+   * Adds one field to the JsObject
    */
-  def +(otherField: (String, JsValue)): JsObject =
-    JsObject(fields :+ otherField)
+  def +(otherField: (String, JsValue)): JsObject = JsObject(underlying + otherField)
 
   /**
-   * merges everything in depth and doesn't stop at first level as ++
-   * TODO : improve because coding is nasty there
+   * merges everything in depth and doesn't stop at first level, as ++ does
    */
   def deepMerge(other: JsObject): JsObject = {
-    def step(fields: Vector[(String, JsValue)], others: Vector[(String, JsValue)]): Seq[(String, JsValue)] = {
-      others match {
-        case Vector() => fields
-        case Vector(sv) =>
-          var found = false
-          val newFields = fields match {
-            case Vector() => Vector(sv)
-            case _ => fields.foldLeft(Vector[(String, JsValue)]()) { (acc, field) =>
-              field match {
-                case (key, obj: JsObject) if (key == sv._1) =>
-                  found = true
-                  acc :+ key -> {
-                    sv._2 match {
-                      case o @ JsObject(_) => obj.deepMerge(o)
-                      case js => js
-                    }
-                  }
-                case (key, value) if (key == sv._1) =>
-                  found = true
-                  acc :+ key -> sv._2
-                case (key, value) => acc :+ key -> value
-              }
-            }
+    def merge(existingObject: JsObject, otherObject: JsObject): JsObject = {
+      val result = existingObject.underlying ++ otherObject.underlying.map {
+        case (otherKey, otherValue) =>
+          val maybeExistingValue = existingObject.underlying.get(otherKey)
+
+          val newValue = (maybeExistingValue, otherValue) match {
+            case (Some(e: JsObject), o: JsObject) => merge(e, o)
+            case (Some(e: JsArray), o: JsArray) => e ++ o
+            case _ => otherValue
           }
-
-          if (!found) fields :+ sv
-          else newFields
-
-        case head +: tail =>
-          var found = false
-          val headFields = fields match {
-            case Vector() => Vector(head)
-            case _ => fields.foldLeft(Vector[(String, JsValue)]()) { (acc, field) =>
-              field match {
-                case (key, obj: JsObject) if (key == head._1) =>
-                  found = true
-                  acc :+ key -> {
-                    head._2 match {
-                      case o @ JsObject(_) => obj.deepMerge(o)
-                      case js => js
-                    }
-                  }
-                case (key, value) if (key == head._1) =>
-                  found = true
-                  acc :+ key -> head._2
-                case (key, value) => acc :+ key -> value
-              }
-            }
-          }
-
-          if (!found) step(fields :+ head, tail)
-          else step(headFields, tail)
-
+          otherKey -> newValue
       }
+      JsObject(result)
     }
-
-    JsObject(step(fields.toVector, other.fields.toVector))
+    merge(this, other)
   }
 
-  override def equals(other: Any): Boolean =
-    other match {
-
-      case that: JsObject =>
-        (that canEqual this) &&
-          fieldSet == that.fieldSet
-
-      case _ => false
-    }
+  override def equals(other: Any): Boolean = other match {
+    case that: JsObject => (that canEqual this) && fieldSet == that.fieldSet
+    case _ => false
+  }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[JsObject]
 
   override def hashCode: Int = fieldSet.hashCode()
+}
 
+object JsObject {
+  /**
+   * Construct a new JsObject, with the order of fields in the Seq.
+   */
+  def apply(fields: Seq[(String, JsValue)]): JsObject = new JsObject(mutable.LinkedHashMap(fields: _*))
 }
 
 // -- Serializers.
 
-private[json] class JsValueSerializer extends JsonSerializer[JsValue] {
+private[json] object JsValueSerializer extends JsonSerializer[JsValue] {
+  import java.math.{ BigDecimal => JBigDec, BigInteger }
+  import com.fasterxml.jackson.databind.node.{ BigIntegerNode, DecimalNode }
 
   override def serialize(value: JsValue, json: JsonGenerator, provider: SerializerProvider) {
     value match {
-      case JsNumber(v) => json.writeNumber(v.bigDecimal)
+      case JsNumber(v) => {
+        // Workaround #3784: Same behaviour as if JsonGenerator were
+        // configured with WRITE_BIGDECIMAL_AS_PLAIN, but forced as this
+        // configuration is ignored when called from ObjectMapper.valueToTree
+        val raw = v.bigDecimal.stripTrailingZeros.toPlainString
+
+        if (raw contains ".") json.writeTree(new DecimalNode(new JBigDec(raw)))
+        else json.writeTree(new BigIntegerNode(new BigInteger(raw)))
+      }
       case JsString(v) => json.writeString(v)
       case JsBoolean(v) => json.writeBoolean(v)
       case JsArray(elements) => {
@@ -323,9 +198,6 @@ private[json] class JsValueSerializer extends JsonSerializer[JsValue] {
         json.writeEndObject()
       }
       case JsNull => json.writeNull()
-      case JsUndefined() => {
-        json.writeNull()
-      }
     }
   }
 }
@@ -372,37 +244,40 @@ private[json] class JsValueDeserializer(factory: TypeFactory, klass: Class[_]) e
       jp.nextToken()
     }
 
-    val (maybeValue, nextContext) = (jp.getCurrentToken, parserContext) match {
+    val (maybeValue, nextContext) = (jp.getCurrentToken.id(): @switch) match {
 
-      case (JsonToken.VALUE_NUMBER_INT | JsonToken.VALUE_NUMBER_FLOAT, c) => (Some(JsNumber(jp.getDecimalValue)), c)
+      case JsonTokenId.ID_NUMBER_INT | JsonTokenId.ID_NUMBER_FLOAT => (Some(JsNumber(jp.getDecimalValue)), parserContext)
 
-      case (JsonToken.VALUE_STRING, c) => (Some(JsString(jp.getText)), c)
+      case JsonTokenId.ID_STRING => (Some(JsString(jp.getText)), parserContext)
 
-      case (JsonToken.VALUE_TRUE, c) => (Some(JsBoolean(true)), c)
+      case JsonTokenId.ID_TRUE => (Some(JsBoolean(true)), parserContext)
 
-      case (JsonToken.VALUE_FALSE, c) => (Some(JsBoolean(false)), c)
+      case JsonTokenId.ID_FALSE => (Some(JsBoolean(false)), parserContext)
 
-      case (JsonToken.VALUE_NULL, c) => (Some(JsNull), c)
+      case JsonTokenId.ID_NULL => (Some(JsNull), parserContext)
 
-      case (JsonToken.START_ARRAY, c) => (None, (ReadingList(ListBuffer())) +: c)
+      case JsonTokenId.ID_START_ARRAY => (None, ReadingList(ListBuffer()) +: parserContext)
 
-      case (JsonToken.END_ARRAY, ReadingList(content) :: stack) => (Some(JsArray(content)), stack)
+      case JsonTokenId.ID_END_ARRAY => parserContext match {
+        case ReadingList(content) :: stack => (Some(JsArray(content)), stack)
+        case _ => throw new RuntimeException("We should have been reading list, something got wrong")
+      }
 
-      case (JsonToken.END_ARRAY, _) => throw new RuntimeException("We should have been reading list, something got wrong")
+      case JsonTokenId.ID_START_OBJECT => (None, ReadingMap(ListBuffer()) +: parserContext)
 
-      case (JsonToken.START_OBJECT, c) => (None, ReadingMap(ListBuffer()) +: c)
+      case JsonTokenId.ID_FIELD_NAME => parserContext match {
+        case (c: ReadingMap) :: stack => (None, c.setField(jp.getCurrentName) +: stack)
+        case _ => throw new RuntimeException("We should be reading map, something got wrong")
+      }
 
-      case (JsonToken.FIELD_NAME, (c: ReadingMap) :: stack) => (None, c.setField(jp.getCurrentName) +: stack)
+      case JsonTokenId.ID_END_OBJECT => parserContext match {
+        case ReadingMap(content) :: stack => (Some(JsObject(content)), stack)
+        case _ => throw new RuntimeException("We should have been reading an object, something got wrong")
+      }
 
-      case (JsonToken.FIELD_NAME, _) => throw new RuntimeException("We should be reading map, something got wrong")
+      case JsonTokenId.ID_NOT_AVAILABLE => throw new RuntimeException("We should have been reading an object, something got wrong")
 
-      case (JsonToken.END_OBJECT, ReadingMap(content) :: stack) => (Some(JsObject(content)), stack)
-
-      case (JsonToken.END_OBJECT, _) => throw new RuntimeException("We should have been reading an object, something got wrong")
-
-      case (JsonToken.NOT_AVAILABLE, _) => throw new RuntimeException("We should have been reading an object, something got wrong")
-
-      case (JsonToken.VALUE_EMBEDDED_OBJECT, _) => throw new RuntimeException("We should have been reading an object, something got wrong")
+      case JsonTokenId.ID_EMBEDDED_OBJECT => throw new RuntimeException("We should have been reading an object, something got wrong")
     }
 
     // Read ahead
@@ -443,7 +318,7 @@ private[json] class PlayDeserializers(classLoader: ClassLoader) extends Deserial
 private[json] class PlaySerializers extends Serializers.Base {
   override def findSerializer(config: SerializationConfig, javaType: JavaType, beanDesc: BeanDescription) = {
     val ser: Object = if (classOf[JsValue].isAssignableFrom(beanDesc.getBeanClass)) {
-      new JsValueSerializer
+      JsValueSerializer
     } else {
       null
     }
@@ -452,7 +327,6 @@ private[json] class PlaySerializers extends Serializers.Base {
 }
 
 private[play] object JacksonJson {
-
   import com.fasterxml.jackson.core.Version
   import com.fasterxml.jackson.databind.module.SimpleModule
   import com.fasterxml.jackson.databind.Module.SetupContext
@@ -470,34 +344,38 @@ private[play] object JacksonJson {
     }
   }
 
-  private[this] lazy val jsonFactory = new com.fasterxml.jackson.core.JsonFactory(mapper)
+  private[this] lazy val jsonFactory =
+    new com.fasterxml.jackson.core.JsonFactory(mapper)
 
-  private[this] def stringJsonGenerator(out: java.io.StringWriter) = jsonFactory.createGenerator(out)
+  private[this] def stringJsonGenerator(out: java.io.StringWriter) =
+    jsonFactory.createGenerator(out)
 
-  private[this] def jsonParser(c: String): JsonParser = jsonFactory.createParser(c)
+  private[this] def jsonParser(c: String): JsonParser =
+    jsonFactory.createParser(c)
 
-  private[this] def jsonParser(data: Array[Byte]): JsonParser = jsonFactory.createParser(data)
+  private[this] def jsonParser(data: Array[Byte]): JsonParser =
+    jsonFactory.createParser(data)
 
-  private[this] def jsonParser(stream: InputStream): JsonParser = jsonFactory.createParser(stream)
+  private[this] def jsonParser(stream: InputStream): JsonParser =
+    jsonFactory.createParser(stream)
 
-  def parseJsValue(data: Array[Byte]): JsValue = {
+  def parseJsValue(data: Array[Byte]): JsValue =
     mapper.readValue(jsonParser(data), classOf[JsValue])
-  }
 
-  def parseJsValue(input: String): JsValue = {
+  def parseJsValue(input: String): JsValue =
     mapper.readValue(jsonParser(input), classOf[JsValue])
-  }
 
-  def parseJsValue(stream: InputStream): JsValue = {
+  def parseJsValue(stream: InputStream): JsValue =
     mapper.readValue(jsonParser(stream), classOf[JsValue])
-  }
 
   def generateFromJsValue(jsValue: JsValue, escapeNonASCII: Boolean = false): String = {
     val sw = new java.io.StringWriter
     val gen = stringJsonGenerator(sw)
+
     if (escapeNonASCII) {
       gen.enable(JsonGenerator.Feature.ESCAPE_NON_ASCII)
     }
+
     mapper.writeValue(gen, jsValue)
     sw.flush()
     sw.getBuffer.toString
@@ -508,17 +386,16 @@ private[play] object JacksonJson {
     val gen = stringJsonGenerator(sw).setPrettyPrinter(
       new com.fasterxml.jackson.core.util.DefaultPrettyPrinter()
     )
-    mapper.writerWithDefaultPrettyPrinter().writeValue(gen, jsValue)
+    val writer: ObjectWriter = mapper.writerWithDefaultPrettyPrinter()
+    writer.writeValue(gen, jsValue)
     sw.flush()
     sw.getBuffer.toString
   }
 
-  def jsValueToJsonNode(jsValue: JsValue): JsonNode = {
+  def jsValueToJsonNode(jsValue: JsValue): JsonNode =
     mapper.valueToTree(jsValue)
-  }
 
-  def jsonNodeToJsValue(jsonNode: JsonNode): JsValue = {
+  def jsonNodeToJsValue(jsonNode: JsonNode): JsValue =
     mapper.treeToValue(jsonNode, classOf[JsValue])
-  }
 
 }

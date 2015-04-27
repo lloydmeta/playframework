@@ -1,14 +1,17 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.inject
 
+import akka.actor.ActorSystem
 import javax.inject.{ Singleton, Inject, Provider }
-
 import play.api._
 import play.api.http._
 import play.api.libs.{ CryptoConfig, Crypto, CryptoConfigParser }
-import play.core.Router
+import play.api.libs.concurrent.{ ExecutionContextProvider, ActorSystemProvider }
+import play.api.routing.Router
+
+import scala.concurrent.ExecutionContext
 
 class BuiltinModule extends Module {
   def bindings(env: Environment, configuration: Configuration): Seq[Binding[_]] = {
@@ -18,7 +21,8 @@ class BuiltinModule extends Module {
 
     Seq(
       bind[Environment] to env,
-      bind[Configuration] to configuration,
+      bind[ConfigurationProvider].to(new ConfigurationProvider(configuration)),
+      bind[Configuration].toProvider[ConfigurationProvider],
       bind[HttpConfiguration].toProvider[HttpConfiguration.HttpConfigurationProvider],
 
       // Application lifecycle, bound both to the interface, and its implementation, so that Application can access it
@@ -27,10 +31,11 @@ class BuiltinModule extends Module {
       bind[ApplicationLifecycle].to(bind[DefaultApplicationLifecycle]),
 
       bind[Application].to[DefaultApplication],
-      bind[play.inject.Injector].to[play.inject.DelegateInjector],
-      // bind Plugins - eager
+      bind[play.Application].to[play.DefaultApplication],
 
-      bind[Router.Routes].toProvider[RoutesProvider],
+      bind[Router].toProvider[RoutesProvider],
+      bind[ActorSystem].toProvider[ActorSystemProvider],
+      bind[ExecutionContext].toProvider[ExecutionContextProvider],
       bind[Plugins].toProvider[PluginsProvider],
 
       bind[CryptoConfig].toProvider[CryptoConfigParser],
@@ -43,13 +48,17 @@ class BuiltinModule extends Module {
   }
 }
 
+// This allows us to access the original configuration via this
+// provider while overriding the binding for Configuration itself.
+class ConfigurationProvider(val get: Configuration) extends Provider[Configuration]
+
 @Singleton
-class RoutesProvider @Inject() (injector: Injector, environment: Environment, configuration: Configuration, httpConfig: HttpConfiguration) extends Provider[Router.Routes] {
+class RoutesProvider @Inject() (injector: Injector, environment: Environment, configuration: Configuration, httpConfig: HttpConfiguration) extends Provider[Router] {
   lazy val get = {
     val prefix = httpConfig.context
 
     val router = Router.load(environment, configuration)
-      .fold[Router.Routes](Router.Null)(injector.instanceOf(_))
+      .fold[Router](Router.empty)(injector.instanceOf(_))
     router.withPrefix(prefix)
   }
 }

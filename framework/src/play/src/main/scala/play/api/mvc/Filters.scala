@@ -1,11 +1,15 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.mvc
 
 import play.api._
 import play.api.libs.iteratee._
 import scala.concurrent.{ Promise, Future }
+
+trait EssentialFilter {
+  def apply(next: EssentialAction): EssentialAction
+}
 
 /**
  * Implement this interface if you want to add a Filter to your application
@@ -18,10 +22,6 @@ import scala.concurrent.{ Promise, Future }
  * }
  * }}}
  */
-trait EssentialFilter {
-  def apply(next: EssentialAction): EssentialAction
-}
-
 trait Filter extends EssentialFilter {
 
   self =>

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.mvc
 
@@ -18,7 +18,7 @@ import play.api.libs.Files.TemporaryFile
 import MultipartFormData._
 import java.util.Locale
 import scala.util.control.NonFatal
-import play.api.http.HttpVerbs
+import play.api.http.{ ParserConfiguration, HttpConfiguration, HttpVerbs }
 import play.utils.PlayIO
 import play.api.http.Status._
 
@@ -228,20 +228,16 @@ case class RawBuffer(memoryThreshold: Int, initialData: Array[Byte] = Array.empt
    */
   def asBytes(maxLength: Long = memoryThreshold): Option[Array[Byte]] = {
     if (size <= maxLength) {
-
       if (inMemory != null) {
-
         val buffer = new Array[Byte](inMemorySize)
         inMemory.reverse.foldLeft(0) { (position, chunk) =>
           System.arraycopy(chunk, 0, buffer, position, Math.min(chunk.length, buffer.length - position))
           chunk.length + position
         }
         Some(buffer)
-
       } else {
         Some(PlayIO.readFile(backedByTemporaryFile.file))
       }
-
     } else {
       None
     }
@@ -269,6 +265,8 @@ case class RawBuffer(memoryThreshold: Int, initialData: Array[Byte] = Array.empt
  */
 trait BodyParsers {
 
+  import BodyParsers._
+
   /**
    * Default body parsers.
    */
@@ -281,22 +279,30 @@ trait BodyParsers {
 
     private val ApplicationXmlMatcher = """application/.*\+xml.*""".r
 
+    private def config = Play.maybeApplication.map(app => hcCache(app).parser)
+      .getOrElse(ParserConfiguration())
+
     /**
      * Default max length allowed for text based body.
      *
      * You can configure it in application.conf:
      *
      * {{{
-     * parsers.text.maxLength = 512k
+     * play.http.parser.maxMemoryBuffer = 512k
      * }}}
      */
-    def DefaultMaxTextLength: Int = Play.maybeApplication.flatMap { app =>
-      app.configuration.getBytes("parsers.text.maxLength").map(_.toInt)
-    }.getOrElse(1024 * 100)
+    def DefaultMaxTextLength: Int = config.maxMemoryBuffer
 
-    def DefaultMaxDiskLength: Long = Play.maybeApplication.flatMap { app =>
-      app.configuration.getBytes("parsers.disk.maxLength")
-    }.getOrElse(10 * 1024 * 1024)
+    /**
+     * Default max length allowed for text based body.
+     *
+     * You can configure it in application.conf:
+     *
+     * {{{
+     * parsers.disk.maxLength = 512k
+     * }}}
+     */
+    def DefaultMaxDiskLength: Long = config.maxDiskBuffer
 
     // -- Text parser
 
@@ -434,7 +440,7 @@ trait BodyParsers {
      * }}}
      *
      * @param form Form model
-     * @param maxLength Max length allowed or returns EntityTooLarge HTTP response. If `None`, the default `parsers.text.maxLength` configuration value is used.
+     * @param maxLength Max length allowed or returns EntityTooLarge HTTP response. If `None`, the default `play.http.parser.maxMemoryBuffer` configuration value is used.
      * @param onErrors The result to reply in case of errors during the form binding process
      */
     def form[A](form: Form[A], maxLength: Option[Long] = None, onErrors: Form[A] => Result = (formErrors: Form[A]) => Results.BadRequest): BodyParser[A] =
@@ -561,7 +567,8 @@ trait BodyParsers {
     /**
      * Parse the body as form url encoded without checking the Content-Type.
      */
-    def tolerantFormUrlEncoded: BodyParser[Map[String, Seq[String]]] = tolerantFormUrlEncoded(DefaultMaxTextLength)
+    def tolerantFormUrlEncoded: BodyParser[Map[String, Seq[String]]] =
+      tolerantFormUrlEncoded(DefaultMaxTextLength)
 
     /**
      * Parse the body as form url encoded if the Content-Type is application/x-www-form-urlencoded.
@@ -577,7 +584,8 @@ trait BodyParsers {
     /**
      * Parse the body as form url encoded if the Content-Type is application/x-www-form-urlencoded.
      */
-    def urlFormEncoded: BodyParser[Map[String, Seq[String]]] = urlFormEncoded(DefaultMaxTextLength)
+    def urlFormEncoded: BodyParser[Map[String, Seq[String]]] =
+      urlFormEncoded(DefaultMaxTextLength)
 
     // -- Magic any content
 
@@ -613,28 +621,28 @@ trait BodyParsers {
       val contentType: Option[String] = request.contentType.map(_.toLowerCase(Locale.ENGLISH))
       contentType match {
         case Some("text/plain") => {
-          Play.logger.trace("Parsing AnyContent as text")
+          logger.trace("Parsing AnyContent as text")
           text(maxLengthOrDefault)(request).map(_.right.map(s => AnyContentAsText(s)))
         }
         case Some("text/xml") | Some("application/xml") | Some(ApplicationXmlMatcher()) => {
-          Play.logger.trace("Parsing AnyContent as xml")
+          logger.trace("Parsing AnyContent as xml")
           xml(maxLengthOrDefault)(request).map(_.right.map(x => AnyContentAsXml(x)))
         }
         case Some("text/json") | Some("application/json") => {
-          Play.logger.trace("Parsing AnyContent as json")
+          logger.trace("Parsing AnyContent as json")
           json(maxLengthOrDefault)(request).map(_.right.map(j => AnyContentAsJson(j)))
         }
         case Some("application/x-www-form-urlencoded") => {
-          Play.logger.trace("Parsing AnyContent as urlFormEncoded")
+          logger.trace("Parsing AnyContent as urlFormEncoded")
           urlFormEncoded(maxLengthOrDefault)(request).map(_.right.map(d => AnyContentAsFormUrlEncoded(d)))
         }
         case Some("multipart/form-data") => {
-          Play.logger.trace("Parsing AnyContent as multipartFormData")
+          logger.trace("Parsing AnyContent as multipartFormData")
           multipartFormData(Multipart.handleFilePartAsTemporaryFile, maxLengthOrDefaultLarge)(request)
             .map(_.right.map(m => AnyContentAsMultipartFormData(m)))
         }
         case _ => {
-          Play.logger.trace("Parsing AnyContent as raw")
+          logger.trace("Parsing AnyContent as raw")
           raw(DefaultMaxTextLength, maxLengthOrDefaultLarge)(request).map(_.right.map(r => AnyContentAsRaw(r)))
         }
       }
@@ -653,10 +661,8 @@ trait BodyParsers {
      *
      * @param filePartHandler Handles file parts.
      */
-    def multipartFormData[A](filePartHandler: Multipart.PartHandler[FilePart[A]],
-      maxLength: Long = DefaultMaxDiskLength): BodyParser[MultipartFormData[A]] = {
+    def multipartFormData[A](filePartHandler: Multipart.PartHandler[FilePart[A]], maxLength: Long = DefaultMaxDiskLength): BodyParser[MultipartFormData[A]] = {
       BodyParser("multipartFormData") { request =>
-
         import play.api.libs.iteratee.Execution.Implicits.trampoline
 
         val parser = Traversable.takeUpTo[Array[Byte]](maxLength).transform(
@@ -691,7 +697,7 @@ trait BodyParsers {
     /**
      * A body parser that always returns an error.
      */
-    def error[A](result: Future[Result]): BodyParser[A] = BodyParser("error, result=" + result) { request =>
+    def error[A](result: Future[Result]): BodyParser[A] = BodyParser("error") { request =>
       import play.api.libs.iteratee.Execution.Implicits.trampoline
       Iteratee.flatten(result.map(r => Done(Left(r), Empty)))
     }
@@ -734,8 +740,8 @@ trait BodyParsers {
                 parser(request, bytes)
               }.left.map {
                 case NonFatal(e) =>
-                  Play.logger.debug(errorMessage, e)
-                  createBadResult(errorMessage)(request)
+                  logger.debug(errorMessage, e)
+                  createBadResult(errorMessage + ": " + e.getMessage)(request)
                 case t => throw t
               }
             }
@@ -748,13 +754,16 @@ trait BodyParsers {
         }
       }
   }
-
 }
 
 /**
  * Defaults BodyParsers.
  */
-object BodyParsers extends BodyParsers
+object BodyParsers extends BodyParsers {
+  private val logger = Logger(this.getClass)
+
+  private val hcCache = Application.instanceCache[HttpConfiguration]
+}
 
 /**
  * Signal a max content size exceeded

@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Accessing an SQL database
 
 ## Configuring JDBC connection pools
@@ -63,13 +63,6 @@ db.default.user=playdbuser
 db.default.password="a strong password"
 ```
 
-## How to see SQL Statement in the console?
-
-```properties
-db.default.logStatements=true
-logger.com.jolbox=DEBUG // for EBean
-```
-
 ## How to configure several data sources
 
 ```properties
@@ -89,7 +82,7 @@ Play is bundled only with an [H2](http://www.h2database.com) database driver. Co
 For example, if you use MySQL5, you need to add a [[dependency | SBTDependencies]] for the connector:
 
 ```scala
-libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.27"
+libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.34"
 ```
 
 Or if the driver can't be found from repositories you can drop the driver into your project's [[unmanaged dependencies|Anatomy]] `lib` directory.
@@ -170,3 +163,17 @@ DB.withTransaction { conn =>
   // do whatever you need with the connection
 }
 ```
+
+## Selecting and configuring the connection pool
+
+Out of the box, Play provides two database connection pool implementations, [HikariCP](https://github.com/brettwooldridge/HikariCP) and [BoneCP](http://jolbox.com/).  The default is HikariCP, but this can be changed by setting the `play.db.pool` property:
+
+```
+play.db.pool=bonecp
+```
+
+The full range of configuration options for connection pools can be found by inspecting the `play.db.prototype` property in Play's JDBC [`reference.conf`](resources/confs/play-jdbc/reference.conf).
+
+## Testing
+
+For information on testing with databases, including how to setup in-memory databases and, see [[Testing With Databases|ScalaTestingWithDatabases]].

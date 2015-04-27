@@ -1,15 +1,16 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.inject
 
 import java.lang.annotation.Annotation
 import javax.inject.{ Named, Provider }
-import com.google.inject.internal.util.$SourceProvider
-import com.google.inject.name.Names
-
 import scala.language.existentials
 import scala.reflect.ClassTag
+
+import play.inject.SourceProvider
+
+import com.google.inject.name.Names
 
 /**
  * A binding.
@@ -51,6 +52,10 @@ final case class Binding[T](key: BindingKey[T], target: Option[BindingTarget[T]]
   }
 }
 
+object BindingKey {
+  def apply[T](clazz: Class[T]): BindingKey[T] = new BindingKey(clazz)
+}
+
 /**
  * A binding key.
  *
@@ -59,7 +64,9 @@ final case class Binding[T](key: BindingKey[T], target: Option[BindingTarget[T]]
  * @param clazz The class to bind.
  * @param qualifier An optional qualifier.
  */
-final case class BindingKey[T](clazz: Class[T], qualifier: Option[QualifierAnnotation] = None) {
+final case class BindingKey[T](clazz: Class[T], qualifier: Option[QualifierAnnotation]) {
+
+  def this(clazz: Class[T]) = this(clazz, None)
 
   /**
    * Qualify this binding key with the given instance of an annotation.
@@ -264,9 +271,7 @@ final case class QualifierInstance[T <: Annotation](instance: T) extends Qualifi
 final case class QualifierClass[T <: Annotation](clazz: Class[T]) extends QualifierAnnotation
 
 private object SourceLocator {
-  // SourceProvider is an internal Guice API, not intended to be used as we are using it here. If they change/remove it, we
-  // just have to reimplement it for ourselves - it's pretty simple.
-  val provider = $SourceProvider.DEFAULT_INSTANCE.plusSkippedClasses(this.getClass, classOf[BindingKey[_]], classOf[Binding[_]])
+  val provider = SourceProvider.DEFAULT_INSTANCE.plusSkippedClasses(this.getClass, classOf[BindingKey[_]], classOf[Binding[_]])
 
   def source = provider.get()
 }

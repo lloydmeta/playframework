@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.mvc
 
 import play.api.libs.iteratee._
 import play.api._
-import play.core.Router.{ HandlerInvoker, HandlerInvokerFactory }
+import play.core.routing.{ HandlerInvoker, HandlerInvokerFactory, HandlerDef }
 import scala.concurrent._
 import scala.language.higherKinds
 
@@ -25,33 +25,6 @@ trait Handler
  */
 trait RequestTaggingHandler extends Handler {
   def tagRequest(request: RequestHeader): RequestHeader
-}
-
-/**
- * Reference to a Handler, useful for contructing handlers from Java code.
- */
-class HandlerRef[T](call: => T, handlerDef: play.core.Router.HandlerDef)(implicit hif: play.core.Router.HandlerInvokerFactory[T]) extends play.mvc.HandlerRef {
-
-  lazy val invoker: HandlerInvoker[T] = hif.createInvoker(call, handlerDef)
-
-  /**
-   * Retrieve a real handler behind this ref.
-   */
-  def handler: play.api.mvc.Handler = {
-    invoker.call(call)
-  }
-
-  /**
-   * String representation of this Handler.
-   */
-  lazy val sym = {
-    handlerDef.controller + "." + handlerDef.method + "(" + handlerDef.parameterTypes.map(_.getName).mkString(", ") + ")"
-  }
-
-  override def toString = {
-    "HandlerRef[" + sym + ")]"
-  }
-
 }
 
 /**
@@ -98,6 +71,8 @@ object EssentialAction {
  */
 trait Action[A] extends EssentialAction {
 
+  import Action._
+
   /**
    * Type of the request body.
    */
@@ -120,11 +95,11 @@ trait Action[A] extends EssentialAction {
 
   def apply(rh: RequestHeader): Iteratee[Array[Byte], Result] = parser(rh).mapM {
     case Left(r) =>
-      Play.logger.trace("Got direct result from the BodyParser: " + r)
+      logger.trace("Got direct result from the BodyParser: " + r)
       Future.successful(r)
     case Right(a) =>
       val request = Request(rh, a)
-      Play.logger.trace("Invoking action with request: " + request)
+      logger.trace("Invoking action with request: " + request)
       Play.maybeApplication.map { app =>
         play.utils.Threads.withContextClassLoader(app.classloader) {
           apply(request)
@@ -553,6 +528,8 @@ trait ActionBuilder[+R[_]] extends ActionFunction[Request, R] {
  * Helper object to create `Action` values.
  */
 object Action extends ActionBuilder[Request] {
+  private val logger = Logger(Action.getClass)
+
   def invokeBlock[A](request: Request[A], block: (Request[A]) => Future[Result]) = block(request)
 }
 
@@ -605,7 +582,7 @@ trait ActionTransformer[-R[_], +P[_]] extends ActionRefiner[R, P] {
  */
 trait ActionFilter[R[_]] extends ActionRefiner[R, R] {
   /**
-   * Determine whether to process a request.  This is the main method than an ActionFilter has to implement.
+   * Determine whether to process a request.  This is the main method that an ActionFilter has to implement.
    * It can decide to immediately intercept the request and return a Result (Some), or continue processing (None).
    *
    * @param request the input request

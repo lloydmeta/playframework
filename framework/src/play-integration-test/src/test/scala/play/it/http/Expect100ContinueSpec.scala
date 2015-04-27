@@ -1,14 +1,18 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http
 
+import play.it._
 import play.api.mvc._
 import play.api.test._
 import play.api.test.TestServer
 import play.api.libs.iteratee._
 
-object Expect100ContinueSpec extends PlaySpecification {
+object NettyExpect100ContinueSpec extends Expect100ContinueSpec with NettyIntegrationSpecification
+object AkkaHttpExpect100ContinueSpec extends Expect100ContinueSpec with AkkaHttpIntegrationSpecification
+
+trait Expect100ContinueSpec extends PlaySpecification with ServerIntegrationSpecification {
 
   "Play" should {
 

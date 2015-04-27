@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package scalaguide.async.scalacomet
 
@@ -7,6 +7,7 @@ import play.api.mvc._
 import play.api.libs.iteratee.{Enumeratee, Iteratee, Enumerator}
 import play.api.test._
 import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 import play.api.libs.Comet
 
 object ScalaCometSpec extends PlaySpecification with Controller {

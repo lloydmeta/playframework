@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api
 
@@ -103,5 +103,5 @@ object Environment {
    * Uses the same classloader that the environment classloader is defined in, and the current working directory as the
    * path.
    */
-  def simple(mode: Mode.Mode = Mode.Test) = Environment(new File("."), Environment.getClass.getClassLoader, mode)
+  def simple(path: File = new File("."), mode: Mode.Mode = Mode.Test) = Environment(path, Environment.getClass.getClassLoader, mode)
 }

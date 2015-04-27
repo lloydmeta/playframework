@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http
 
@@ -7,8 +7,12 @@ import play.api.mvc._
 import play.api.test._
 import play.api.libs.ws._
 import play.api.test.FakeApplication
+import play.it._
 
-object FormFieldOrderSpec extends PlaySpecification {
+object NettyFormFieldOrderSpec extends FormFieldOrderSpec with NettyIntegrationSpecification
+object AkkaHttpFormFieldOrderSpec extends FormFieldOrderSpec with AkkaHttpIntegrationSpecification
+
+trait FormFieldOrderSpec extends PlaySpecification with ServerIntegrationSpecification {
 
   "Play' form URL Decoding " should {
 

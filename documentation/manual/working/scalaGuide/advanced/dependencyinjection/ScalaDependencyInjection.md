@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Runtime Dependency Injection
 
 Dependency injection is a way that you can separate your components so that they are not directly dependent on each other, rather, they get injected into each other.
@@ -14,6 +14,28 @@ If you have a component, such as a controller, and it requires some other compon
 @[constructor](code/RuntimeDependencyInjection.scala)
 
 Note that the `@Inject` annotation must come after the class name but before the constructor parameters, and must have parenthesis.
+
+## Dependency injecting controllers
+
+There are two ways to make Play use dependency injected controllers.
+
+### Injected routes generator
+
+By default, Play will generate a static router, that assumes that all actions are static methods.  By configuring Play to use the injected routes generator, you can get Play to generate a router that will declare all the controllers that it routes to as dependencies, allowing your controllers to be dependency injected themselves.
+
+We recommend always using the injected routes generator, the static routes generator exists primarily as a tool to aid migration so that existing projects don't have to make all their controllers non static at once.
+
+To enable the injected routes generator, add the following to your build settings in `build.sbt`:
+
+@[content](code/injected.sbt)
+
+When using the injected routes generator, prefixing the action with an `@` symbol takes on a special meaning, it means instead of the controller being injected directly, a `Provider` of the controller will be injected.  This allows, for example, prototype controllers, as well as an option for breaking cyclic dependencies.
+
+### Injected actions
+
+If using the static routes generator, you can indicate that an action has an injected controller by prefixing the action with `@`, like so:
+
+@[injected](code/scalaguide.advanced.dependencyinjection.injected.routes)
 
 ## Singletons
 
@@ -51,7 +73,11 @@ In some more complex situations, you may want to provide more complex bindings, 
 
 @[guice-module](code/RuntimeDependencyInjection.scala)
 
-To register this module with Play, append it's fully qualified class name to the `play.modules.enabled` list in `application.conf`:
+In even more complex situations you might want to access the Play configuration or ClassLoader when you configure Guice bindings. You can get access to these objects by adding them to your module's constructor.
+
+@[dynamic-guice-module](code/RuntimeDependencyInjection.scala)
+
+To register either of these HelloWorld modules with Play, append the fully qualified class name to the `play.modules.enabled` list in `application.conf`:
 
     play.modules.enabled += "modules.HelloModule"
 

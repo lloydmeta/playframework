@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play;
 
@@ -23,6 +23,22 @@ public class Environment {
     @Inject
     public Environment(play.api.Environment environment) {
         this.env = environment;
+    }
+
+    public Environment(File rootPath, ClassLoader classLoader, Mode mode) {
+        this(new play.api.Environment(rootPath, classLoader, play.api.Mode.apply(mode.ordinal())));
+    }
+
+    public Environment(File rootPath, Mode mode) {
+        this(rootPath, Environment.class.getClassLoader(), mode);
+    }
+
+    public Environment(File rootPath) {
+        this(rootPath, Environment.class.getClassLoader(), Mode.TEST);
+    }
+
+    public Environment(Mode mode) {
+        this(new File("."), Environment.class.getClassLoader(), mode);
     }
 
     /**

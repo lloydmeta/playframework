@@ -1,19 +1,23 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http
 
-import java.io.ByteArrayInputStream
-
+import java.io.{ ByteArrayInputStream, IOException }
 import play.api.Application
 import play.api.test._
 import play.api.libs.ws.WSResponse
+import play.it._
 import play.libs.EventSource
 import play.libs.EventSource.Event
 import play.mvc.Results
 import play.mvc.Results.Chunks
+import scala.util.{ Failure, Success, Try }
 
-object JavaResultsHandlingSpec extends PlaySpecification with WsTestClient {
+object NettyJavaResultsHandlingSpec extends JavaResultsHandlingSpec with NettyIntegrationSpecification
+object AkkaHttpJavaResultsHandlingSpec extends JavaResultsHandlingSpec with AkkaHttpIntegrationSpecification
+
+trait JavaResultsHandlingSpec extends PlaySpecification with WsTestClient with ServerIntegrationSpecification {
 
   "Java results handling" should {
     def makeRequest[T](controller: MockController)(block: WSResponse => T) = {
@@ -48,14 +52,30 @@ object JavaResultsHandlingSpec extends PlaySpecification with WsTestClient {
       response.body must_== "Hello world"
     }
 
-    "send results as is with a content length" in makeRequest(new MockController {
-      def action = {
-        response.setHeader(CONTENT_LENGTH, "5")
-        Results.ok("Hello world")
+    "truncate results or close connection if content length is too short" in {
+      val controller = new MockController {
+        def action = {
+          response.setHeader(CONTENT_LENGTH, "5")
+          Results.ok("Hello world")
+        }
       }
-    }) { response =>
-      response.header(CONTENT_LENGTH) must beSome("5")
-      response.body must_== "Hello"
+      implicit val port = testServerPort
+      lazy val app: Application = FakeApplication(
+        withRoutes = {
+          case _ => JAction(app, controller)
+        }
+      )
+      // We accept different behaviors for different HTTP
+      // backends. Either behavior is OK.
+      running(TestServer(port, app)) {
+        Try(await(wsUrl("/").get())) match {
+          case Success(response) =>
+            response.header(CONTENT_LENGTH) must beSome("5")
+            response.body must_== "Hello" // Truncated
+          case Failure(t) =>
+            t must haveClass[IOException] // Connection closed
+        }
+      }
     }
 
     "chunk results that are streamed" in makeRequest(new MockController {
@@ -86,7 +106,9 @@ object JavaResultsHandlingSpec extends PlaySpecification with WsTestClient {
         })
       }
     }) { response =>
-      response.header(CONTENT_TYPE) must beSome("text/event-stream; charset=utf-8")
+      response.header(CONTENT_TYPE) must beSome.like {
+        case value => value.toLowerCase must_== "text/event-stream; charset=utf-8"
+      }
       response.header(TRANSFER_ENCODING) must beSome("chunked")
       response.header(CONTENT_LENGTH) must beNone
       response.body must_== "data: a\n\ndata: b\n\n"

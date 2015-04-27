@@ -1,16 +1,17 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.http
 
 import javax.inject.{ Provider, Inject }
 
+import org.joda.time.DateTime
 import play.api.inject.{ BindingKey, Binding }
 import play.api.libs.iteratee.Done
-import play.api.{ Configuration, Environment, GlobalSettings }
+import play.api.{ PlayConfig, Configuration, Environment, GlobalSettings }
 import play.api.http.Status._
 import play.api.mvc._
-import play.core.Router
+import play.api.routing.Router
 import play.core.actions.HeadAction
 import play.core.j.{ JavaHandler, JavaHandlerComponents }
 import play.utils.Reflect
@@ -44,7 +45,7 @@ object HttpRequestHandler {
     val javaComponentsBinding = BindingKey(classOf[play.core.j.JavaHandlerComponents]).toSelf
 
     Reflect.configuredClass[HttpRequestHandler, play.http.HttpRequestHandler, GlobalSettingsHttpRequestHandler](environment,
-      configuration, "play.http.requestHandler", "RequestHandler") match {
+      PlayConfig(configuration), "play.http.requestHandler", "RequestHandler") match {
         case None => Nil
         case Some(Left(scalaImpl)) =>
           Seq(
@@ -60,6 +61,20 @@ object HttpRequestHandler {
             javaComponentsBinding
           )
       }
+  }
+
+  // This filter, applied to all requests, can be used to make sure required headers are present
+  private[play] val defaultFilter: EssentialFilter = new EssentialFilter {
+    import play.api.libs.concurrent.Execution.Implicits._
+    def apply(next: EssentialAction) = new EssentialAction {
+      def apply(rh: RequestHeader) = next(rh) map { result =>
+        if (result.header.headers.get(HeaderNames.DATE).isDefined) {
+          result
+        } else {
+          result.withDateHeaders(HeaderNames.DATE -> DateTime.now())
+        }
+      }
+    }
   }
 }
 
@@ -84,23 +99,34 @@ object NotImplementedHttpRequestHandler extends HttpRequestHandler {
  * of this, so when not providing any custom logic, whether this is used or the global settings http request handler
  * is used is irrelevant.
  */
-class DefaultHttpRequestHandler(routes: Router.Routes, errorHandler: HttpErrorHandler, configuration: HttpConfiguration,
+class DefaultHttpRequestHandler(router: Router, errorHandler: HttpErrorHandler, configuration: HttpConfiguration,
     filters: EssentialFilter*) extends HttpRequestHandler {
 
   @Inject
-  def this(routes: Router.Routes, errorHandler: HttpErrorHandler, configuration: HttpConfiguration, filters: HttpFilters) =
-    this(routes, errorHandler, configuration, filters.filters: _*)
+  def this(router: Router, errorHandler: HttpErrorHandler, configuration: HttpConfiguration, filters: HttpFilters) =
+    this(router, errorHandler, configuration, filters.filters: _*)
 
-  private val context = if (configuration.context.endsWith("/")) {
-    configuration.context
-  } else {
-    configuration.context + "/"
+  private val context = configuration.context.stripSuffix("/")
+
+  private def inContext(path: String): Boolean = {
+    // Assume context is a string without a trailing '/'.
+    // Handle four cases:
+    // * context.isEmpty
+    //   - There is no context, everything is in context, short circuit all other checks
+    // * !path.startsWith(context)
+    //   - Either path is shorter than context or starts with a different prefix.
+    // * path.startsWith(context) && path.length == context.length
+    //   - Path is equal to context.
+    // * path.startsWith(context) && path.charAt(context.length) == '/')
+    //   - Path starts with context followed by a '/' character.
+    context.isEmpty ||
+      (path.startsWith(context) && (path.length == context.length || path.charAt(context.length) == '/'))
   }
 
   def handlerForRequest(request: RequestHeader) = {
 
     def notFoundHandler = Action.async(BodyParsers.parse.empty)(req =>
-      errorHandler.onClientError(request, NOT_FOUND)
+      errorHandler.onClientError(req, NOT_FOUND)
     )
 
     val (routedRequest, handler) = routeRequest(request) map {
@@ -114,7 +140,7 @@ class DefaultHttpRequestHandler(routes: Router.Routes, errorHandler: HttpErrorHa
         case HttpVerbs.HEAD =>
           val headAction = routeRequest(request.copy(method = HttpVerbs.GET)) match {
             case Some(action: EssentialAction) => action
-            case None => notFoundHandler
+            case _ => notFoundHandler
           }
           new HeadAction(headAction)
         case _ =>
@@ -132,7 +158,8 @@ class DefaultHttpRequestHandler(routes: Router.Routes, errorHandler: HttpErrorHa
   protected def filterHandler(next: RequestHeader => Handler): (RequestHeader => Handler) = {
     (request: RequestHeader) =>
       next(request) match {
-        case action: EssentialAction if request.path startsWith context => filterAction(action)
+        case action: EssentialAction =>
+          HttpRequestHandler.defaultFilter(if (inContext(request.path)) filterAction(action) else action)
         case handler => handler
       }
   }
@@ -156,7 +183,7 @@ class DefaultHttpRequestHandler(routes: Router.Routes, errorHandler: HttpErrorHa
    * @return A handler to handle the request, if one can be found
    */
   def routeRequest(request: RequestHeader): Option[Handler] = {
-    routes.handlerFor(request)
+    router.handlerFor(request)
   }
 
 }
@@ -182,8 +209,8 @@ class GlobalSettingsHttpRequestHandler @Inject() (global: Provider[GlobalSetting
  * If your application routes to Java actions, then you must use this request handler as the base class as is or as
  * the base class for your custom [[HttpRequestHandler]].
  */
-class JavaCompatibleHttpRequestHandler @Inject() (routes: Router.Routes, errorHandler: HttpErrorHandler,
-  configuration: HttpConfiguration, filters: HttpFilters, components: JavaHandlerComponents) extends DefaultHttpRequestHandler(routes,
+class JavaCompatibleHttpRequestHandler @Inject() (router: Router, errorHandler: HttpErrorHandler,
+  configuration: HttpConfiguration, filters: HttpFilters, components: JavaHandlerComponents) extends DefaultHttpRequestHandler(router,
   errorHandler, configuration, filters.filters: _*) {
 
   override def routeRequest(request: RequestHeader): Option[Handler] = {

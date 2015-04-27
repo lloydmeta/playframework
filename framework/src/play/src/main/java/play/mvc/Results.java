@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.mvc;
 
@@ -14,6 +14,8 @@ import play.libs.F.*;
 import play.twirl.api.Content;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,8 +41,8 @@ public class Results {
     /**
      * Generates a simple result.
      */
-    public static Status status(int status) {
-        return new Status(play.core.j.JavaResults.Status(status));
+    public static StatusHeader status(int status) {
+        return new StatusHeader(play.core.j.JavaResults.Status(status));
     }
 
     /**
@@ -132,8 +134,8 @@ public class Results {
     /**
      * Generates a 200 OK simple result.
      */
-    public static Status ok() {
-        return new Status(play.core.j.JavaResults.Ok());
+    public static StatusHeader ok() {
+        return new StatusHeader(play.core.j.JavaResults.Ok());
     }
 
     /**
@@ -240,8 +242,8 @@ public class Results {
     /**
      * Generates a 201 CREATED simple result.
      */
-    public static Status created() {
-        return new Status(play.core.j.JavaResults.Created());
+    public static StatusHeader created() {
+        return new StatusHeader(play.core.j.JavaResults.Created());
     }
 
     /**
@@ -349,7 +351,7 @@ public class Results {
      * Generates a 204 NO_CONTENT simple result.
      */
     public static Status noContent() {
-        return new Status(play.core.j.JavaResults.Status(204));
+        return new Status(play.core.j.JavaResults.NoContent());
     }
 
     // -- INTERNAL_SERVER_ERROR
@@ -357,8 +359,8 @@ public class Results {
     /**
      * Generates a 500 INTERNAL_SERVER_ERROR simple result.
      */
-    public static Status internalServerError() {
-        return new Status(play.core.j.JavaResults.InternalServerError());
+    public static StatusHeader internalServerError() {
+        return new StatusHeader(play.core.j.JavaResults.InternalServerError());
     }
 
     /**
@@ -465,8 +467,8 @@ public class Results {
     /**
      * Generates a 404 NOT_FOUND simple result.
      */
-    public static Status notFound() {
-        return new Status(play.core.j.JavaResults.NotFound());
+    public static StatusHeader notFound() {
+        return new StatusHeader(play.core.j.JavaResults.NotFound());
     }
 
     /**
@@ -573,8 +575,8 @@ public class Results {
     /**
      * Generates a 403 FORBIDDEN simple result.
      */
-    public static Status forbidden() {
-        return new Status(play.core.j.JavaResults.Forbidden());
+    public static StatusHeader forbidden() {
+        return new StatusHeader(play.core.j.JavaResults.Forbidden());
     }
 
     /**
@@ -676,13 +678,121 @@ public class Results {
         return new Status(play.core.j.JavaResults.Forbidden(), chunks);
     }
 
+    // -- PAYMENT_REQUIRED
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static StatusHeader paymentRequired() {
+        return new StatusHeader(play.core.j.JavaResults.PaymentRequired());
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static Status paymentRequired(Content content) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content, utf8);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static Status paymentRequired(Content content, String charset) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content, Codec.javaSupported(charset));
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static Status paymentRequired(String content) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content, utf8);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static Status paymentRequired(String content, String charset) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content, Codec.javaSupported(charset));
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static Status paymentRequired(JsonNode content) {
+     return new Status(play.core.j.JavaResults.PaymentRequired(), content, utf8);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static Status paymentRequired(JsonNode content, String charset) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content, Codec.javaSupported(charset));
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED simple result.
+     */
+    public static Status paymentRequired(byte[] content) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED chunked result.
+     */
+    public static Status paymentRequired(InputStream content) {
+        return paymentRequired(content, defaultChunkSize);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED chunked result.
+     */
+    public static Status paymentRequired(InputStream content, int chunkSize) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content, chunkSize);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED file result as an attachment.
+     *
+     * @param content The file to send.
+     */
+    public static Status paymentRequired(File content) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), content);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED file result.
+     *
+     * @param content The file to send.
+     * @param inline Whether the file should be sent inline, or as an attachment.
+     */
+    public static Status paymentRequired(File content, boolean inline) {
+        return new Status(JavaResults.PaymentRequired(), content, inline);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED file result as an attachment.
+     *
+     * @param content The file to send.
+     * @param filename The name to send the file as.
+     */
+    public static Status paymentRequired(File content, String filename) {
+        return new Status(JavaResults.PaymentRequired(), content, true, filename);
+    }
+
+    /**
+     * Generates a 402 PAYMENT_REQUIRED chunked result.
+     */
+    public static Status paymentRequired(Chunks<?> chunks) {
+        return new Status(play.core.j.JavaResults.PaymentRequired(), chunks);
+    }
+
     // -- UNAUTHORIZED
 
     /**
      * Generates a 401 UNAUTHORIZED simple result.
      */
-    public static Status unauthorized() {
-        return new Status(play.core.j.JavaResults.Unauthorized());
+    public static StatusHeader unauthorized() {
+        return new StatusHeader(play.core.j.JavaResults.Unauthorized());
     }
 
     /**
@@ -789,8 +899,8 @@ public class Results {
     /**
      * Generates a 400 BAD_REQUEST simple result.
      */
-    public static Status badRequest() {
-        return new Status(play.core.j.JavaResults.BadRequest());
+    public static StatusHeader badRequest() {
+        return new StatusHeader(play.core.j.JavaResults.BadRequest());
     }
 
     /**
@@ -1006,18 +1116,16 @@ public class Results {
             final Chunks<A> self = this;
             this.writable = writable;
             final RedeemablePromise<Object> disconnected = RedeemablePromise.<Object>empty();
-            this.enumerator = play.core.j.JavaResults.chunked(new Callback<Concurrent.Channel<A>>() {
-                @Override
-                public void invoke(Concurrent.Channel<A> channel) {
-                    Chunks.Out<A> chunked = new Chunks.Out<A>(channel, disconnected);
-                    self.onReady(chunked);
-                }
-            }, new Callback0() {
-                @Override
-                public void invoke() throws Throwable {
-                    disconnected.success(null);
-                }
-            });
+            this.enumerator = play.core.j.JavaResults.chunked(
+                new Callback<Concurrent.Channel<A>>() {
+                    @Override
+                    public void invoke(Concurrent.Channel<A> channel) {
+                        Chunks.Out<A> chunked = new Chunks.Out<A>(channel, disconnected);
+                        self.onReady(chunked);
+                    }
+                },
+                () -> disconnected.success(null)
+            );
         }
 
         /**
@@ -1060,11 +1168,7 @@ public class Results {
              * Attach a callback to be called when the socket is disconnected.
              */
             public void onDisconnected(final Callback0 callback) {
-                disconnected.onRedeem(new Callback<Object>() {
-                    public void invoke(Object ignored) throws Throwable {
-                        callback.invoke();
-                    }
-                });
+                disconnected.onRedeem(ignored -> callback.invoke());
             }
 
             /**
@@ -1082,6 +1186,8 @@ public class Results {
      * Chunked result based on String chunks.
      */
     public abstract static class StringChunks extends Chunks<String> {
+
+        private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(StringChunks.class);
 
         public StringChunks() {
             this(utf8);
@@ -1154,7 +1260,7 @@ public class Results {
                 try {
                     callback.invoke(out);
                 } catch (Throwable e) {
-                    play.PlayInternal.logger().error("Exception in StringChunks.onReady", e);
+                    logger.error("Exception in StringChunks.onReady", e);
                 }
             }
         }
@@ -1188,6 +1294,8 @@ public class Results {
          */
         static final class WhenReadyByteChunks extends ByteChunks {
 
+            private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(WhenReadyByteChunks.class);
+
             private final Callback<Chunks.Out<byte[]>> callback;
 
             WhenReadyByteChunks(Callback<Chunks.Out<byte[]>> callback) {
@@ -1201,7 +1309,7 @@ public class Results {
                 try {
                     callback.invoke(out);
                 } catch (Throwable e) {
-                    play.PlayInternal.logger().error("Exception in ByteChunks.onReady", e);
+                    logger.error("Exception in ByteChunks.onReady", e);
                 }
             }
         }
@@ -1228,17 +1336,123 @@ public class Results {
     }
 
     /**
+     * A status with no body
+     */
+    public static class StatusHeader implements Result {
+
+        private final play.api.mvc.Results.Status wrappedStatus;
+
+        public StatusHeader(play.api.mvc.Results.Status wrappedStatus) {
+            this.wrappedStatus = wrappedStatus;
+        }
+
+        /**
+         * Send the given resource.
+         *
+         * The resource will be loaded from the same classloader that this class comes from.
+         *
+         * @param resourceName The path of the resource to load.
+         */
+        public Status sendResource(String resourceName) {
+            return sendResource(resourceName, true);
+        }
+
+        /**
+         * Send the given resource from the given classloader.
+         *
+         * @param resourceName The path of the resource to load.
+         * @param classLoader The classloader to load it from.
+         */
+        public Status sendResource(String resourceName, ClassLoader classLoader) {
+            return sendResource(resourceName, classLoader, true);
+        }
+
+        /**
+         * Send the given resource.
+         *
+         * The resource will be loaded from the same classloader that this class comes from.
+         *
+         * @param resourceName The path of the resource to load.
+         * @param inline Whether it should be served as an inline file, or as an attachment.
+         */
+        public Status sendResource(String resourceName, boolean inline) {
+            return sendResource(resourceName, this.getClass().getClassLoader(), inline);
+        }
+
+        /**
+         * Send the given resource from the given classloader.
+         *
+         * @param resourceName The path of the resource to load.
+         * @param classLoader The classloader to load it from.
+         * @param inline Whether it should be served as an inline file, or as an attachment.
+         */
+        public Status sendResource(String resourceName, ClassLoader classLoader, boolean inline) {
+            return new Status(wrappedStatus.sendResource(resourceName, classLoader, inline));
+        }
+
+        /**
+         * Sends the given path.
+         *
+         * @param path The path to send.
+         */
+        public Status sendPath(Path path) {
+            return sendPath(path, false);
+        }
+
+        /**
+         * Sends the given path.
+         *
+         * @param path The path to send.
+         * @param inline Whether it should be served as an inline file, or as an attachment.
+         */
+        public Status sendPath(Path path, boolean inline) {
+            return sendPath(path, inline, path.getFileName().toString());
+        }
+
+        /**
+         * Sends the given path.
+         *
+         * @param path The path to send.
+         * @param inline Whether it should be served as an inline file, or as an attachment.
+         * @param filename The file name of the path.
+         */
+        public Status sendPath(Path path, boolean inline, String filename) {
+            if (path == null) {
+                throw new NullPointerException("null content");
+            }
+            return new Status(play.core.j.JavaResults.sendPath(wrappedStatus, path, inline, filename));
+        }
+
+        /**
+         * Sends the given path using chunked transfer encoding.
+         *
+         * @param path The path to send.
+         * @param chunkSize Length of chunk.
+         */
+        public Status sendPath(Path path, int chunkSize) {
+            if (path == null) {
+                throw new NullPointerException("null content");
+            }
+            return new Status(wrappedStatus.chunked(
+                    play.core.j.JavaResults.chunked(path, chunkSize),
+                    play.core.j.JavaResults.writeBytes(Scala.orNull(play.api.libs.MimeTypes.forFileName(path.getFileName().toString())))
+            ));
+        }
+
+        public play.api.mvc.Result toScala() {
+            return wrappedStatus;
+        }
+    }
+
+    /**
      * A simple result.
      */
     public static class Status implements Result {
 
         private play.api.mvc.Result wrappedResult;
 
-        public Status(play.api.mvc.Results.Status status) {
-            wrappedResult = status.apply(
-                    play.core.j.JavaResults.empty(),
-                    play.core.j.JavaResults.writeEmptyContent()
-                    );
+        public Status(play.api.mvc.Result wrappedResult) {
+            this.wrappedResult = wrappedResult;
         }
 
         public Status(play.api.mvc.Results.Status status, String content, Codec codec) {
@@ -1285,7 +1499,7 @@ public class Results {
             wrappedResult = status.apply(
                     content,
                     play.core.j.JavaResults.writeBytes()
-                    );
+            );
         }
 
         public Status(play.api.mvc.Results.Status status, File content) {
@@ -1310,7 +1524,7 @@ public class Results {
             wrappedResult = status.chunked(
                     play.core.j.JavaResults.chunked(content, chunkSize),
                     play.core.j.JavaResults.writeBytes(Scala.orNull(play.api.libs.MimeTypes.forFileName(content.getName())))
-                    );
+            );
         }
 
         public Status(play.api.mvc.Results.Status status, InputStream content, int chunkSize) {

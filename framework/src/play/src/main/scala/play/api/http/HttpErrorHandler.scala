@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.http
 
@@ -10,8 +10,9 @@ import play.api.inject.Binding
 import play.api.mvc.Results._
 import play.api.mvc._
 import play.api.http.Status._
+import play.api.routing.Router
 import play.core.j.JavaHttpErrorHandlerAdapter
-import play.core.{ SourceMapper, Router }
+import play.core.SourceMapper
 import play.utils.{ Reflect, PlayIO }
 
 import scala.concurrent._
@@ -48,7 +49,7 @@ object HttpErrorHandler {
    * Get the bindings for the error handler from the configuration
    */
   def bindingsFromConfiguration(environment: Environment, configuration: Configuration): Seq[Binding[_]] = {
-    Reflect.bindingsFromConfiguration[HttpErrorHandler, play.http.HttpErrorHandler, JavaHttpErrorHandlerAdapter, GlobalSettingsHttpErrorHandler](environment, configuration, "play.http.errorHandler", "ErrorHandler")
+    Reflect.bindingsFromConfiguration[HttpErrorHandler, play.http.HttpErrorHandler, JavaHttpErrorHandlerAdapter, GlobalSettingsHttpErrorHandler](environment, PlayConfig(configuration), "play.http.errorHandler", "ErrorHandler")
   }
 }
 
@@ -77,7 +78,7 @@ private[play] class GlobalSettingsHttpErrorHandler @Inject() (global: Provider[G
       case FORBIDDEN => Future.successful(Forbidden(views.html.defaultpages.unauthorized()))
       case NOT_FOUND => global.get.onHandlerNotFound(request)
       case clientError if statusCode >= 400 && statusCode < 500 =>
-        Future.successful(Results.Status(clientError)(views.html.defaultpages.badRequest(request, message)))
+        Future.successful(Results.Status(clientError)(views.html.defaultpages.badRequest(request.method, request.uri, message)))
       case nonClientError =>
         throw new IllegalArgumentException(s"onClientError invoked with non client error status code $statusCode: $message")
     }
@@ -99,7 +100,7 @@ private[play] class GlobalSettingsHttpErrorHandler @Inject() (global: Provider[G
  * This class is intended to be extended, allowing users to reuse some of the functionality provided here.
  *
  * @param environment The environment
- * @param routes An optional router.
+ * @param router An optional router.
  *               If provided, in dev mode, will be used to display more debug information when a handler can't be found.
  *               This is a lazy parameter, to avoid circular dependency issues, since the router may well depend on
  *               this.
@@ -107,12 +108,12 @@ private[play] class GlobalSettingsHttpErrorHandler @Inject() (global: Provider[G
 @Singleton
 class DefaultHttpErrorHandler(environment: Environment, configuration: Configuration,
     sourceMapper: Option[SourceMapper] = None,
-    routes: => Option[Router.Routes] = None) extends HttpErrorHandler {
+    router: => Option[Router] = None) extends HttpErrorHandler {
 
   @Inject
   def this(environment: Environment, configuration: Configuration, sourceMapper: OptionalSourceMapper,
-    routes: Provider[Router.Routes]) =
-    this(environment, configuration, sourceMapper.sourceMapper, Some(routes.get))
+    router: Provider[Router]) =
+    this(environment, configuration, sourceMapper.sourceMapper, Some(router.get))
 
   private val playEditor = configuration.getString("play.editor")
 
@@ -128,7 +129,7 @@ class DefaultHttpErrorHandler(environment: Environment, configuration: Configura
     case FORBIDDEN => onForbidden(request, message)
     case NOT_FOUND => onNotFound(request, message)
     case clientError if statusCode >= 400 && statusCode < 500 =>
-      Future.successful(Results.Status(clientError)(views.html.defaultpages.badRequest(request, message)))
+      Future.successful(Results.Status(clientError)(views.html.defaultpages.badRequest(request.method, request.uri, message)))
     case nonClientError =>
       throw new IllegalArgumentException(s"onClientError invoked with non client error status code $statusCode: $message")
   }
@@ -140,7 +141,7 @@ class DefaultHttpErrorHandler(environment: Environment, configuration: Configura
    * @param message The error message.
    */
   protected def onBadRequest(request: RequestHeader, message: String): Future[Result] =
-    Future.successful(BadRequest(views.html.defaultpages.badRequest(request, message)))
+    Future.successful(BadRequest(views.html.defaultpages.badRequest(request.method, request.uri, message)))
 
   /**
    * Invoked when a client makes a request that was forbidden.
@@ -159,8 +160,8 @@ class DefaultHttpErrorHandler(environment: Environment, configuration: Configura
    */
   protected def onNotFound(request: RequestHeader, message: String): Future[Result] = {
     Future.successful(NotFound(environment.mode match {
-      case Mode.Prod => views.html.defaultpages.notFound(request)
-      case _ => views.html.defaultpages.devNotFound(request, routes)
+      case Mode.Prod => views.html.defaultpages.notFound(request.method, request.uri)
+      case _ => views.html.defaultpages.devNotFound(request.method, request.uri, router)
     }))
   }
 
@@ -179,13 +180,7 @@ class DefaultHttpErrorHandler(environment: Environment, configuration: Configura
       val usefulException = HttpErrorHandlerExceptions.throwableToUsefulException(sourceMapper,
         environment.mode == Mode.Prod, exception)
 
-      Logger.error(
-        """
-          |
-          |! @%s - Internal server error, for (%s) [%s] ->
-          |""".stripMargin.format(usefulException.id, request.method, request.uri),
-        usefulException
-      )
+      logServerError(request, usefulException)
 
       environment.mode match {
         case Mode.Prod => onProdServerError(request, usefulException)
@@ -196,6 +191,23 @@ class DefaultHttpErrorHandler(environment: Environment, configuration: Configura
         Logger.error("Error while handling error", e)
         Future.successful(InternalServerError)
     }
+  }
+
+  /**
+   * Responsible for logging server errors.
+   *
+   * This can be overridden to add additional logging information, eg. the id of the authenticated user.
+   *
+   * @param request The request that triggered the server error.
+   * @param usefulException The server error.
+   */
+  protected def logServerError(request: RequestHeader, usefulException: UsefulException) {
+    Logger.error("""
+                    |
+                    |! @%s - Internal server error, for (%s) [%s] ->
+                    | """.stripMargin.format(usefulException.id, request.method, request.uri),
+      usefulException
+    )
   }
 
   /**

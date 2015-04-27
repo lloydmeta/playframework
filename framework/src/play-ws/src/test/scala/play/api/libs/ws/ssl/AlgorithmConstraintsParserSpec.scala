@@ -1,6 +1,6 @@
 /*
  *
- *  * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ *  * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  *
  */
 package play.api.libs.ws.ssl
@@ -16,11 +16,6 @@ object AlgorithmConstraintsParserSpec extends Specification with ParserMatchers 
   import AlgorithmConstraintsParser._
 
   "AlgorithmConstraintParser" should {
-
-    "succeed to recognize 'MD5, MD2, SHA1'" in {
-      val constraints: List[AlgorithmConstraint] = List(AlgorithmConstraint("MD5"), AlgorithmConstraint("MD2"), AlgorithmConstraint("SHA1"))
-      line must succeedOn("MD5, MD2, SHA1").withResult(constraints: ExpectedParsedResult[List[AlgorithmConstraint]])
-    }
 
     "succeed to recognize 'RSA'" in {
       expression must succeedOn("RSA").withResult(AlgorithmConstraint("RSA"))

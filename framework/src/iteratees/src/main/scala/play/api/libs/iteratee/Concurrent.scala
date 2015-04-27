@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.iteratee
 
@@ -17,7 +17,7 @@ import play.api.libs.iteratee.Execution.Implicits.{ defaultExecutionContext => d
  */
 object Concurrent {
 
-  private val timer = new java.util.Timer()
+  private val timer = new java.util.Timer(true)
 
   private def timeoutFuture[A](v: A, delay: Long, unit: TimeUnit): Future[A] = {
 

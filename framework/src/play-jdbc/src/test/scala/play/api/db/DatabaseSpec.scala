@@ -1,9 +1,10 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.db
 
 import java.sql.SQLException
+import com.zaxxer.hikari.HikariDataSource
 import org.specs2.mutable.{ After, Specification }
 
 object DatabaseSpec extends Specification {
@@ -11,7 +12,7 @@ object DatabaseSpec extends Specification {
   "Database" should {
 
     "create database" in new WithDatabase {
-      val db = Database("test", "org.h2.Driver", "jdbc:h2:mem:test")
+      val db = Database(name = "test", driver = "org.h2.Driver", url = "jdbc:h2:mem:test")
       db.name must_== "test"
       db.url must_== "jdbc:h2:mem:test"
     }
@@ -45,7 +46,7 @@ object DatabaseSpec extends Specification {
       db.name must_== "default"
       db.url must_== "jdbc:h2:mem:default"
       db.dataSource match {
-        case ds: com.jolbox.bonecp.BoneCPDataSource => ds.getJdbcUrl must_== "jdbc:h2:mem:default;MODE=MySQL"
+        case ds: HikariDataSource => ds.getJdbcUrl must_== "jdbc:h2:mem:default;MODE=MySQL"
         case _ =>
       }
     }
@@ -119,7 +120,7 @@ object DatabaseSpec extends Specification {
       db.getConnection.close()
       db.shutdown()
       db.getConnection.close() must throwA[SQLException].like {
-        case e => e.getMessage must startWith("Attempting to obtain a connection from a pool that has already been shutdown")
+        case e => e.getMessage must startWith("Pool has been shutdown")
       }
     }
 
@@ -127,7 +128,7 @@ object DatabaseSpec extends Specification {
 
   trait WithDatabase extends After {
     def db: Database
-    def after = db.shutdown()
+    def after = () //db.shutdown()
   }
 
 }

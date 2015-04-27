@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 
 package play.libs.ws.ning;
@@ -7,7 +7,7 @@ package play.libs.ws.ning;
 import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.AsyncHttpClientConfig;
 import play.libs.ws.WSClient;
-import play.libs.ws.WSRequestHolder;
+import play.libs.ws.WSRequest;
 
 public class NingWSClient implements WSClient {
 
@@ -22,11 +22,11 @@ public class NingWSClient implements WSClient {
     }
 
     @Override
-    public WSRequestHolder url(String url) {
-        return new NingWSRequestHolder(this, url);
+    public WSRequest url(String url) {
+        return new NingWSRequest(this, url);
     }
 
-    protected void close() {
+    public void close() {
         this.asyncHttpClient.close();
     }
 }

@@ -1,12 +1,15 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.streams.impl
 
 import org.reactivestreams._
 import org.specs2.mutable.Specification
-import play.api.libs.iteratee.{ Enumerator, Input }
-import scala.concurrent.{ Future, Promise }
+import play.api.libs.iteratee.{ Concurrent, Enumerator, Input }
+import scala.concurrent.{ Await, Future, Promise }
+import scala.concurrent.duration._
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class EnumeratorPublisherSpec extends Specification {
 
@@ -80,6 +83,47 @@ class EnumeratorPublisherSpec extends Specification {
       testEnv.next must_== OnComplete
       testEnv.isEmptyAfterDelay() must beTrue
     }
+    "be done enumerating after EOF" in {
+      val testEnv = new TestEnv[Int]
+      var enumDone = Promise[Boolean]()
+      val enum = (Enumerator(1, 2, 3) >>> Enumerator.eof).onDoneEnumerating {
+        enumDone.success(true)
+      }
+      val pubr = new EnumeratorPublisher(enum)
+      pubr.subscribe(testEnv.subscriber)
+      testEnv.next must_== OnSubscribe
+      testEnv.request(4)
+      testEnv.next must_== RequestMore(4)
+      testEnv.next must_== OnNext(1)
+      testEnv.next must_== OnNext(2)
+      testEnv.next must_== OnNext(3)
+      testEnv.next must_== OnComplete
+      testEnv.isEmptyAfterDelay() must beTrue
+      Await.result(enumDone.future, Duration(5, SECONDS)) must beTrue
+    }
+    "be done enumerating after being cancelled" in {
+      val testEnv = new TestEnv[Int]
+      var enumDone = Promise[Boolean]()
+      val (broadcastEnum, channel) = Concurrent.broadcast[Int]
+      val enum = broadcastEnum.onDoneEnumerating {
+        enumDone.success(true)
+      }
+      val pubr = new EnumeratorPublisher(enum)
+      pubr.subscribe(testEnv.subscriber)
+      testEnv.next must_== OnSubscribe
+      testEnv.request(4)
+      testEnv.next must_== RequestMore(4)
+      testEnv.isEmptyAfterDelay() must beTrue
+      testEnv.cancel()
+      // Element push occurs after cancel, so will not generate an event.
+      // However it is necessary to have an event so that the publisher's
+      // Cont is satisfied. We want to advance the iteratee to pick up the
+      // Done iteratee caused by the cancel.
+      channel.push(0)
+      testEnv.next must_== Cancel
+      testEnv.isEmptyAfterDelay() must beTrue
+      Await.result(enumDone.future, Duration(5, SECONDS)) must beTrue
+    }
     "enumerate eof only" in {
       val testEnv = new TestEnv[Int]
       val enum: Enumerator[Int] = Enumerator.eof
@@ -111,6 +155,18 @@ class EnumeratorPublisherSpec extends Specification {
       testEnv.request(1)
       testEnv.next must_== RequestMore(1)
       testEnv.next must_== OnNext(-1)
+      testEnv.request(1)
+      testEnv.next must_== RequestMore(1)
+      testEnv.next must_== OnComplete
+      testEnv.isEmptyAfterDelay() must beTrue
+    }
+    "handle errors when enumerating" in {
+      val testEnv = new TestEnv[Int]
+      val lotsOfItems = 0 until 25
+      val enum = Enumerator.flatten(Future.failed(new Exception("x")))
+      val pubr = new EnumeratorPublisher[Nothing](enum)
+      pubr.subscribe(testEnv.subscriber)
+      testEnv.next must_== OnSubscribe
       testEnv.request(1)
       testEnv.next must_== RequestMore(1)
       testEnv.next must_== OnComplete

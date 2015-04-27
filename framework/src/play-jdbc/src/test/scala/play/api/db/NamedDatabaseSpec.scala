@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.db
 
@@ -45,7 +45,7 @@ class NamedDatabaseSpec extends PlaySpecification {
 
     "allow default database name to be configured" in new WithApplication(FakeApplication(
       additionalConfiguration = Map(
-        "play.modules.db.default" -> "other",
+        "play.db.default" -> "other",
         "db.other.driver" -> "org.h2.Driver",
         "db.other.url" -> "jdbc:h2:mem:other"
       )
@@ -58,7 +58,7 @@ class NamedDatabaseSpec extends PlaySpecification {
 
     "allow db config key to be configured" in new WithApplication(FakeApplication(
       additionalConfiguration = Map(
-        "play.modules.db.config" -> "databases",
+        "play.db.config" -> "databases",
         "databases.default.driver" -> "org.h2.Driver",
         "databases.default.url" -> "jdbc:h2:mem:default"
       )

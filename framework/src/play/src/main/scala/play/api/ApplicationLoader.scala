@@ -1,12 +1,11 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api
 
-import play.api.inject.Injector
 import play.api.inject.guice.GuiceApplicationLoader
 import play.core.{ SourceMapper, WebCommands, DefaultWebCommands }
-import play.utils.{ Threads, Reflect }
+import play.utils.Reflect
 
 /**
  * Loads an application.  This is responsible for instantiating an application given a context.
@@ -30,15 +29,6 @@ trait ApplicationLoader {
    */
   def load(context: ApplicationLoader.Context): Application
 
-  /**
-   * Create an injector for runtime DI.
-   *
-   * This can be used by runtime DI providers to provide an injector during testing. The injector should contain all
-   * the components specified by the modules, and should also bind itself.
-   *
-   * If this method is not implemented, FakeApplication will use a NewInstanceInjector instead.
-   */
-  def createInjector(environment: Environment, configuration: Configuration, modules: Seq[Any]): Option[Injector] = None
 }
 
 object ApplicationLoader {
@@ -80,12 +70,10 @@ object ApplicationLoader {
     initialSettings: Map[String, String] = Map.empty[String, String],
     sourceMapper: Option[SourceMapper] = None,
     webCommands: WebCommands = new DefaultWebCommands) = {
-    val configuration = Threads.withContextClassLoader(environment.classLoader) {
-      Configuration.load(environment.rootPath, environment.mode, initialSettings)
-    }
-
+    val configuration = Configuration.load(environment, initialSettings)
     Context(environment, sourceMapper, webCommands, configuration)
   }
+
 }
 
 /**

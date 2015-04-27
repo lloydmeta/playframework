@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Writing functional tests with specs2
 
 Play provides a number of classes and convenience methods that assist with functional testing.  Most of these can be found either in the [`play.api.test`](api/scala/index.html#play.api.test.package) package or in the [`Helpers`](api/scala/index.html#play.api.test.Helpers$) object.
@@ -20,9 +20,9 @@ To provide an environment for tests, Play provides a [`FakeApplication`](api/sca
 
 ## WithApplication
 
-To pass in an application to an example, use [`WithApplication`](api/scala/index.html#play.api.test.WithApplication).  An explicit [`FakeApplication`](api/scala/index.html#play.api.test.FakeApplication) can be passed in, but a default [`FakeApplication`](api/scala/index.html#play.api.test.FakeApplication) is provided for convenience.
+To pass in an application to an example, use [`WithApplication`](api/scala/index.html#play.api.test.WithApplication).  An explicit [`Application`](api/scala/index.html#play.api.Application) can be passed in, but a default [`FakeApplication`](api/scala/index.html#play.api.test.FakeApplication) is provided for convenience.
 
-Because [`WithApplication`](api/scala/index.html#play.api.test.WithApplication) is a built in [`Around`](http://etorreborre.github.io/specs2/guide/org.specs2.guide.Structure.html#Around) block, you can override it to provide your own data population:
+Because [`WithApplication`](api/scala/index.html#play.api.test.WithApplication) is a built in [`Around`](https://etorreborre.github.io/specs2/guide/SPECS2-3.4/org.specs2.guide.Contexts.html#aroundeach) block, you can override it to provide your own data population:
 
 @[scalafunctionaltest-withdbdata](code/specs2/WithDbDataSpec.scala)
 
@@ -40,13 +40,13 @@ A [`FakeApplication`](api/scala/index.html#play.api.test.FakeApplication) can al
 
 ## WithBrowser
 
-If you want to test your application using a browser, you can use [Selenium WebDriver](http://code.google.com/p/selenium/?redir=1). Play will start the WebDriver for you, and wrap it in the convenient API provided by [FluentLenium](https://github.com/FluentLenium/FluentLenium) using [`WithBrowser`](api/scala/index.html#play.api.test.WithBrowser).  Like [`WithServer`](api/scala/index.html#play.api.test.WithServer), you can change the port, [`FakeApplication`](api/scala/index.html#play.api.test.FakeApplication), and you can also select the web browser to use:
+If you want to test your application using a browser, you can use [Selenium WebDriver](http://code.google.com/p/selenium/?redir=1). Play will start the WebDriver for you, and wrap it in the convenient API provided by [FluentLenium](https://github.com/FluentLenium/FluentLenium) using [`WithBrowser`](api/scala/index.html#play.api.test.WithBrowser).  Like [`WithServer`](api/scala/index.html#play.api.test.WithServer), you can change the port, [`Application`](api/scala/index.html#play.api.Application), and you can also select the web browser to use:
 
 @[scalafunctionaltest-testwithbrowser](code/specs2/ScalaFunctionalTestSpec.scala)
 
 ## PlaySpecification
 
-[`PlaySpecification`](api/scala/index.html#play.api.test.PlaySpecification) is an extension of [`Specification`](http://etorreborre.github.io/specs2/api/SPECS2-2.4.9/index.html#org.specs2.mutable.Specification) that excludes some of the mixins provided in the default specs2 specification that clash with Play helpers methods.  It also mixes in the Play test helpers and types for convenience.
+[`PlaySpecification`](api/scala/index.html#play.api.test.PlaySpecification) is an extension of [`Specification`](https://etorreborre.github.io/specs2/api/SPECS2-3.4/index.html#org.specs2.mutable.Specification) that excludes some of the mixins provided in the default specs2 specification that clash with Play helpers methods.  It also mixes in the Play test helpers and types for convenience.
 
 @[scalafunctionaltest-playspecification](code/specs2/ExamplePlaySpecificationSpec.scala)
 

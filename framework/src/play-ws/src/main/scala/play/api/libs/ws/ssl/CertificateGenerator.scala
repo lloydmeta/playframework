@@ -1,6 +1,6 @@
 /*
  *
- *  * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ *  * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  *
  */
 package play.api.libs.ws.ssl
@@ -19,7 +19,7 @@ import scala.util.Properties.isJavaAtLeast
  */
 object CertificateGenerator {
 
-  // http://docs.oracle.com/javase/6/docs/technotes/guides/security/StandardNames.html#KeyPairGenerator
+  // http://docs.oracle.com/javase/8/docs/technotes/guides/security/StandardNames.html#KeyPairGenerator
   // http://www.keylength.com/en/4/
 
   /**
@@ -32,7 +32,7 @@ object CertificateGenerator {
     val keyGen = KeyPairGenerator.getInstance("RSA")
     keyGen.initialize(keySize, new SecureRandom())
     val pair = keyGen.generateKeyPair()
-    generateCertificate(dn, pair, from.toDate, to.toDate, "SHA256WithRSA", AlgorithmId.sha256WithRSAEncryption_oid)
+    generateCertificate(dn, pair, from.toDate, to.toDate, "SHA256withRSA", AlgorithmId.sha256WithRSAEncryption_oid)
   }
 
   def toPEM(certificate: X509Certificate) = {

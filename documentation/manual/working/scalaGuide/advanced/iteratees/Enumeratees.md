@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Handling data streams reactively
 
 ## The realm of Enumeratees
@@ -117,7 +117,7 @@ val toIntOrEnd: Enumeratee[String,Int ] = Enumeratee.mapInput[String] {
 }
 ```
 
-`Enumeratee.map` and `Enumeratee.mapImput` are pretty straight forward, they operate on a per chunk basis and they convert them. Another useful `Enumeratee` is the `Enumeratee.filter` :
+`Enumeratee.map` and `Enumeratee.mapImput` are pretty straightforward, they operate on a per chunk basis and they convert them. Another useful `Enumeratee` is the `Enumeratee.filter` :
 
 ```scala
 def filter[E](predicate: E => Boolean): Enumeratee[E, E]

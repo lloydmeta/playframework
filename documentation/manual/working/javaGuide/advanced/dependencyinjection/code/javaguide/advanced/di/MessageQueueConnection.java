@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package javaguide.advanced.di;
 
@@ -18,11 +18,9 @@ public class MessageQueueConnection {
     public MessageQueueConnection(ApplicationLifecycle lifecycle) {
         connection = MessageQueue.connect();
 
-        lifecycle.addStopHook(new Callable<F.Promise<Void>>() {
-            public F.Promise<Void> call() throws Exception {
-                connection.stop();
-                return F.Promise.pure(null);
-            }
+        lifecycle.addStopHook(() -> {
+            connection.stop();
+            return F.Promise.pure(null);
         });
     }
 

@@ -4,7 +4,7 @@ Out of the box, Play provides a mechanism for runtime dependency injection - tha
 
 An alternative approach that is popular in Scala development is to use compile time dependency injection.  At its simplest, compile time DI can be achieved by manually constructing and wiring dependencies.  Other more advanced techniques and tools exist, such as macro based autowiring tools, implicit auto wiring techniques, and various forms of the cake pattern.  All of these can be easily implemented on top of constructors and manual wiring, so Play's support for compile time dependency injection is provided by providing public constructors and factory methods as API.
   
-In addition to providing public constructors and factory methods, all of Play's out of the box modules provide some traits that implement a lightweight form of the cake pattern, for convenience.  These are built on top of the public constructors, and are completely optional.  In some applications, they will not be appropriate to use, but in many applications, they will be a very convenient mechanism to wiring the components provided by Play.  These traits follow a naming convention of ending the trait name with `Components`, so for example, the default BoneCP based implementation of the DB API provides a trait called [BoneCPComponents](api/scala/index.html#play.api.db.BoneCPComponents).
+In addition to providing public constructors and factory methods, all of Play's out of the box modules provide some traits that implement a lightweight form of the cake pattern, for convenience.  These are built on top of the public constructors, and are completely optional.  In some applications, they will not be appropriate to use, but in many applications, they will be a very convenient mechanism to wiring the components provided by Play.  These traits follow a naming convention of ending the trait name with `Components`, so for example, the default HikariCP based implementation of the DB API provides a trait called [HikariCPComponents](api/scala/index.html#play.api.db.HikariCPComponents).
 
 In the examples below, we will show how to wire a Play application manually using the built in component helper traits.  By reading the source code of these traits it should be trivial to adapt this to any compile time dependency injection technique you please.
 
@@ -34,9 +34,7 @@ To configure Play to use this application loader, configure the `play.applicatio
 
 By default Play will generate a static router that requires all of your actions to be objects.  Play however also supports generating a router than can be dependency injected, this can be enabled by adding the following configuration to your `build.sbt`:
 
-```scala
-routesGenerator := InjectedRoutesGenerator
-```
+@[content](code/injected.sbt)
 
 When you do this, Play will generate a router with a constructor that accepts each of the controllers and included routers from your routes file, in the order they appear in your routes file.  The routers constructor will also, as its first argument, accept an [`HttpErrorHandler`](api/scala/index.html#play.api.http.HttpErrorHandler), which is used to handle parameter binding errors.  The primary constructor will also accept a prefix String as the last argument, but an overloaded constructor that defaults this to `"/"` will also be provided.
 
@@ -53,7 +51,7 @@ class Routes(
   bar_Routes_0: bar.Routes,
   Assets_1: controllers.Assets,
   val prefix: String
-) extends Router.Routes {
+) extends GeneratedRouter {
 
   def this(
     errorHandler: play.api.http.HttpErrorHandler,

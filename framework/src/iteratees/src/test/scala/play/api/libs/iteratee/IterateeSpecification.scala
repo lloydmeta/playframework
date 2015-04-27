@@ -1,12 +1,11 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.libs.iteratee
 
 import play.api.libs.iteratee.internal.executeFuture
 import scala.concurrent.{ Await, ExecutionContext, Future, Promise }
 import scala.concurrent.duration.{ Duration, SECONDS, MILLISECONDS }
-import org.specs2.mutable.SpecificationLike
 import scala.util.Try
 
 /**
@@ -66,7 +65,7 @@ trait IterateeSpecification extends NoConcurrentExecutionContext {
     Iteratee.flatten(timeout(it, delay))
   }
 
-  val timer = new java.util.Timer
+  val timer = new java.util.Timer(true)
   def timeout[A](a: => A, d: Duration)(implicit e: ExecutionContext): Future[A] = {
     val p = Promise[A]()
     timer.schedule(new java.util.TimerTask {

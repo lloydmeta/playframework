@@ -1,13 +1,12 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.routes.compiler
 
 import java.io.File
 
 import org.specs2.mutable.Specification
-
-import scala.io.Source
+import play.routes.compiler.RoutesCompiler.RoutesCompilerTask
 
 object RoutesCompilerSpec extends Specification {
 
@@ -32,19 +31,9 @@ object RoutesCompilerSpec extends Specification {
       }
     }
 
-    "not generate reverse ref routing if its disabled" in withTempDir { tmp =>
-      val f = new File(this.getClass.getClassLoader.getResource("generating.routes").toURI)
-      RoutesCompiler.compile(f, StaticRoutesGenerator, tmp, Seq.empty, generateReverseRouter = true,
-        generateRefReverseRouter = false)
-
-      val generatedJavaRoutes = new File(tmp, "controllers/routes.java")
-      val contents = scala.io.Source.fromFile(generatedJavaRoutes).getLines().mkString("")
-      contents.contains("public static class ref") must beFalse
-    }
-
     "generate routes classes for route definitions that pass the checks" in withTempDir { tmp =>
       val file = new File(this.getClass.getClassLoader.getResource("generating.routes").toURI)
-      RoutesCompiler.compile(file, StaticRoutesGenerator, tmp, Seq())
+      RoutesCompiler.compile(RoutesCompilerTask(file, Seq.empty, true, true, false), StaticRoutesGenerator, tmp)
 
       val generatedRoutes = new File(tmp, "generating/routes_routing.scala")
       generatedRoutes.exists() must beTrue
@@ -55,15 +44,12 @@ object RoutesCompilerSpec extends Specification {
 
     "check if there are no routes using overloaded handler methods" in withTempDir { tmp =>
       val file = new File(this.getClass.getClassLoader.getResource("duplicateHandlers.routes").toURI)
-      RoutesCompiler.compile(file, StaticRoutesGenerator, tmp, Seq.empty) must beLeft
+      RoutesCompiler.compile(RoutesCompilerTask(file, Seq.empty, true, true, false), StaticRoutesGenerator, tmp) must beLeft
     }
 
     "check if routes with type projection are compiled" in withTempDir { tmp =>
       val file = new File(this.getClass.getClassLoader.getResource("complexTypes.routes").toURI)
-      object A {
-        type B = Int
-      }
-      RoutesCompiler.compile(file, StaticRoutesGenerator, tmp, Seq.empty) must beRight
+      RoutesCompiler.compile(RoutesCompilerTask(file, Seq.empty, true, true, false), StaticRoutesGenerator, tmp) must beRight
     }
   }
 }

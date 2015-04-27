@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http.parsing
 
@@ -70,7 +70,7 @@ object MultipartFormDataParserSpec extends PlaySpecification {
     }
 
     "validate the full length of the body" in new WithApplication(FakeApplication(
-      additionalConfiguration = Map("parsers.disk.maxLength" -> "100")
+      additionalConfiguration = Map("play.http.parser.maxDiskBuffer" -> "100")
     )) {
       val parser = parse.multipartFormData.apply(FakeRequest().withHeaders(
         CONTENT_TYPE -> "multipart/form-data; boundary=aabbccddee"
@@ -84,7 +84,7 @@ object MultipartFormDataParserSpec extends PlaySpecification {
     }
 
     "not parse more than the max data length" in new WithApplication(FakeApplication(
-      additionalConfiguration = Map("parsers.text.maxLength" -> "30")
+      additionalConfiguration = Map("play.http.parser.maxMemoryBuffer" -> "30")
     )) {
       val parser = parse.multipartFormData.apply(FakeRequest().withHeaders(
         CONTENT_TYPE -> "multipart/form-data; boundary=aabbccddee"
@@ -109,14 +109,14 @@ object MultipartFormDataParserSpec extends PlaySpecification {
 
     "parse headers with semicolon inside quotes" in {
       val result = FileInfoMatcher.unapply(Map("content-disposition" -> """form-data; name="document"; filename="semicolon;inside.jpg"""", "content-type" -> "image/jpeg"))
-      result must not beEmpty;
-      result.get must equalTo(("document", "semicolon;inside.jpg", Option("image/jpeg")));
+      result must not(beEmpty)
+      result.get must equalTo(("document", "semicolon;inside.jpg", Option("image/jpeg")))
     }
 
     "parse headers with escaped quote inside quotes" in {
       val result = FileInfoMatcher.unapply(Map("content-disposition" -> """form-data; name="document"; filename="quotes\"\".jpg"""", "content-type" -> "image/jpeg"))
-      result must not beEmpty;
-      result.get must equalTo(("document", """quotes"".jpg""", Option("image/jpeg")));
+      result must not(beEmpty)
+      result.get must equalTo(("document", """quotes"".jpg""", Option("image/jpeg")))
     }
   }
 

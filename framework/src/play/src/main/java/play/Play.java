@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play;
 
@@ -46,6 +46,14 @@ public class Play {
     }
 
     public static String langCookieName() {
-        return play.api.Play.langCookieName(play.api.Play.current());
+        return play.api.i18n.Messages.Implicits$.MODULE$.applicationMessagesApi(play.api.Play.current()).langCookieName();
+    }
+
+    public static boolean langCookieSecure() {
+        return play.api.i18n.Messages.Implicits$.MODULE$.applicationMessagesApi(play.api.Play.current()).langCookieSecure();
+    }
+
+    public static boolean langCookieHttpOnly() {
+        return play.api.i18n.Messages.Implicits$.MODULE$.applicationMessagesApi(play.api.Play.current()).langCookieHttpOnly();
     }
 }

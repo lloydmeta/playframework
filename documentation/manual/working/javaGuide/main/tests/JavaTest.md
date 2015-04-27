@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Testing your application
 
 Writing tests for your application can be an involved process. Play supports JUnit and provides helpers and application stubs to make testing your application as easy as possible.
@@ -47,7 +47,7 @@ Hamcrest matchers:
 
 Mocks are used to isolate unit tests against external dependencies. For example, if your class under test depends on an external data access class, you can mock this to provide controlled data and eliminate the need for an external data resource.
 
-The [Mockito](https://code.google.com/p/mockito/) library is in included in your project build to assist you in using mocks.
+The [Mockito](https://code.google.com/p/mockito/) library is included in your project build to assist you in using mocks.
 
 Using Mockito, you can mock classes or interfaces like so:
 
@@ -61,7 +61,7 @@ Let's assume we have the following data model:
 
 @[test-model](code/javaguide/tests/ModelTest.java)
 
-Some data access libraries such as [[Ebean|JavaEbean]] allow you to put data access logic directly in your model classes using static methods. This can make mocking a data dependency tricky.
+Some data access libraries such as Ebean allow you to put data access logic directly in your model classes using static methods. This can make mocking a data dependency tricky.
 
 A common approach for testability is to keep the models isolated from the database and as much logic as possible, and abstract database access behind a repository interface.
 

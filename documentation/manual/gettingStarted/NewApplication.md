@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Creating a new application
 
 ## Create a new application with the activator command
@@ -23,14 +23,14 @@ In either case, you can replace `my-first-app` with whatever name you want your 
 
 [[images/activatorNew.png]]
 
+> If you wish to use other Activator templates, you can do this by running `activator new`. This will prompt you for an application name, and then give you a chance to browse and select an appropriate template.
+
 Once the application has been created you can use the `activator` command again to enter the [[Play console|PlayConsole]].
 
 ```bash
 $ cd my-first-app
 $ activator
 ```
-
-> If you wish to use other Activator templates, you can do this by running `activator new`.  This will prompt you for an application name, and then give you a chance to browse and select an appropriate template.
 
 ## Create a new application with the Activator UI
 
@@ -70,7 +70,7 @@ resolvers += "Typesafe Snapshots" at "https://repo.typesafe.com/typesafe/snapsho
 To ensure the proper sbt version is used, make sure you have the following in `project/build.properties`:
 
 ```
-sbt.version=0.13.5
+sbt.version=0.13.8
 ```
 
 In `build.sbt` for Java projects:

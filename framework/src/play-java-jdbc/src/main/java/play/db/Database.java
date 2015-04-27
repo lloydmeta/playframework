@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.db;
 
@@ -257,5 +257,61 @@ public abstract class Database {
      */
     public static Database inMemoryWith(String k1, Object v1, String k2, Object v2, String k3, Object v3) {
         return inMemory(ImmutableMap.of(k1, v1, k2, v2, k3, v3));
+    }
+
+    /**
+     * Converts the given database to a Scala database
+     */
+    public static play.api.db.Database toScala(final Database database) {
+        if (database instanceof DefaultDatabase) {
+            return ((DefaultDatabase) database).toScala();
+        } else {
+            return new play.api.db.Database() {
+                @Override
+                public String name() {
+                    return database.getName();
+                }
+
+                @Override
+                public Connection getConnection() {
+                    return database.getConnection();
+                }
+
+                @Override
+                public void shutdown() {
+                    database.shutdown();
+                }
+
+                @Override
+                public <A> A withConnection(boolean autocommit, final scala.Function1<Connection, A> block) {
+                    return database.withConnection(autocommit, block::apply);
+                }
+
+                @Override
+                public <A> A withConnection(final scala.Function1<Connection, A> block) {
+                    return database.withConnection(block::apply);
+                }
+
+                @Override
+                public String url() {
+                    return database.getUrl();
+                }
+
+                @Override
+                public DataSource dataSource() {
+                    return database.getDataSource();
+                }
+
+                @Override
+                public Connection getConnection(boolean autocommit) {
+                    return database.getConnection(autocommit);
+                }
+
+                public <A> A withTransaction(final scala.Function1<Connection, A> block) {
+                    return database.withTransaction(block::apply);
+                }
+
+            };
+        }
     }
 }

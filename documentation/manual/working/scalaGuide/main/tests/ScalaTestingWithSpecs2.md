@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Testing your application with specs2
 
 Writing tests for your application can be an involved process.  Play provides a default test framework for you, and provides helpers and application stubs to make testing your application as easy as possible.
@@ -19,9 +19,15 @@ Testing in Play is based on SBT, and a full description is available in the [tes
 
 ## Using specs2
 
+To use Play's specs2 support, add the Play specs2 dependency to your build as a test scoped dependency:
+
+```scala
+libraryDependencies += specs2 % Test
+```
+
 In [specs2](http://etorreborre.github.io/specs2/), tests are organized into specifications, which contain examples which run the system under test through various different code paths.
 
-Specifications extend the [`Specification`](http://etorreborre.github.io/specs2/api/SPECS2-2.4.9/index.html#org.specs2.mutable.Specification) trait and are using the should/in format:
+Specifications extend the [`Specification`](https://etorreborre.github.io/specs2/api/SPECS2-3.4/index.html#org.specs2.mutable.Specification) trait and are using the should/in format:
 
 @[scalatest-helloworldspec](code/specs2/HelloWorldSpec.scala)
 
@@ -55,17 +61,17 @@ When you use an example, you must return an example result. Usually, you will se
 "Hello world" must endWith("world")
 ```
 
-The expression that follows the `must` keyword are known as [`matchers`](http://etorreborre.github.io/specs2/guide/org.specs2.guide.Matchers.html). Matchers return an example result, typically Success or Failure.  The example will not compile if it does not return a result.
+The expression that follows the `must` keyword are known as [`matchers`](https://etorreborre.github.io/specs2/guide/SPECS2-3.4/org.specs2.guide.Matchers.html). Matchers return an example result, typically Success or Failure.  The example will not compile if it does not return a result.
 
-The most useful matchers are the [match results](http://etorreborre.github.io/specs2/guide/org.specs2.guide.Matchers.html#Match+results).  These are used to check for equality, determine the result of Option and Either, and even check if exceptions are thrown.
+The most useful matchers are the [match results](https://etorreborre.github.io/specs2/guide/SPECS2-3.4/org.specs2.guide.Matchers.html#out-of-the-box). These are used to check for equality, determine the result of Option and Either, and even check if exceptions are thrown.
 
-There are also [optional matchers](http://etorreborre.github.io/specs2/guide/org.specs2.guide.Matchers.html#Optional) that allow for XML and JSON matching in tests.
+There are also [optional matchers](https://etorreborre.github.io/specs2/guide/SPECS2-3.4/org.specs2.guide.Matchers.html#optional) that allow for XML and JSON matching in tests.
 
 ### Mockito
 
 Mocks are used to isolate unit tests against external dependencies.  For example, if your class depends on an external `DataService` class, you can feed appropriate data to your class without instantiating a `DataService` object.
 
-[Mockito](https://code.google.com/p/mockito/) is integrated into specs2 as the default [mocking library](http://etorreborre.github.io/specs2/guide/org.specs2.guide.Matchers.html#Mock+expectations).
+[Mockito](https://code.google.com/p/mockito/) is integrated into specs2 as the default [mocking library](https://etorreborre.github.io/specs2/guide/SPECS2-3.4/org.specs2.guide.UseMockito.html).
 
 To use Mockito, add the following import:
 

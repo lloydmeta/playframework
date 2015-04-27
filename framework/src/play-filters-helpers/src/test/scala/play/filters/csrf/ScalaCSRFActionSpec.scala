@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.filters.csrf
 
 import scala.concurrent.Future
-import play.api.libs.ws.{ WS, WSResponse, WSRequestHolder }
+import play.api.libs.ws.{ WS, WSResponse, WSRequest }
 import play.api.mvc._
 
 /**
@@ -13,7 +13,7 @@ import play.api.mvc._
 object ScalaCSRFActionSpec extends CSRFCommonSpecs {
 
   def buildCsrfCheckRequest(sendUnauthorizedResult: Boolean, configuration: (String, String)*) = new CsrfTester {
-    def apply[T](makeRequest: (WSRequestHolder) => Future[WSResponse])(handleResponse: (WSResponse) => T) = withServer(configuration) {
+    def apply[T](makeRequest: (WSRequest) => Future[WSResponse])(handleResponse: (WSResponse) => T) = withServer(configuration) {
       case _ => if (sendUnauthorizedResult) {
         CSRFCheck(Action(Results.Ok), new CustomErrorHandler())
       } else {
@@ -26,7 +26,7 @@ object ScalaCSRFActionSpec extends CSRFCommonSpecs {
   }
 
   def buildCsrfAddToken(configuration: (String, String)*) = new CsrfTester {
-    def apply[T](makeRequest: (WSRequestHolder) => Future[WSResponse])(handleResponse: (WSResponse) => T) = withServer(configuration) {
+    def apply[T](makeRequest: (WSRequest) => Future[WSResponse])(handleResponse: (WSResponse) => T) = withServer(configuration) {
       case _ => CSRFAddToken(Action {
         implicit req =>
           CSRF.getToken(req).map {
@@ -42,6 +42,6 @@ object ScalaCSRFActionSpec extends CSRFCommonSpecs {
 
   class CustomErrorHandler extends CSRF.ErrorHandler {
     import play.api.mvc.Results.Unauthorized
-    def handle(req: RequestHeader, msg: String) = Unauthorized(msg)
+    def handle(req: RequestHeader, msg: String) = Future.successful(Unauthorized(msg))
   }
 }

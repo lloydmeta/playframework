@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package detailedtopics.configuration.threadpools
 
@@ -11,12 +11,11 @@ import com.typesafe.config.ConfigFactory
 import akka.actor.ActorSystem
 import play.api.libs.concurrent.Akka
 import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.ExecutionContext.Implicits.global
 import java.io.File
 import org.specs2.execute.AsResult
 
 object ThreadPoolsSpec extends PlaySpecification {
-
-  override val concurrentExecutionContext = scala.concurrent.ExecutionContext.global
 
   "Play's thread pools" should {
 
@@ -26,23 +25,23 @@ object ThreadPoolsSpec extends PlaySpecification {
 
     "have a global configuration" in {
       val config = """#default-config
-        play {
-          akka {
-            akka.loggers = ["akka.event.Logging$DefaultLogger", "akka.event.slf4j.Slf4jLogger"]
-            loglevel = WARNING
-            actor {
-              default-dispatcher = {
-                fork-join-executor {
-                  parallelism-factor = 1.0
-                  parallelism-max = 24
-                }
-              }
-            }
+        akka {
+          fork-join-executor {
+            # The parallelism factor is used to determine thread pool size using the
+            # following formula: ceil(available processors * factor). Resulting size
+            # is then bounded by the parallelism-min and parallelism-max values.
+            parallelism-factor = 3.0
+     
+            # Min number of threads to cap factor-based parallelism number to
+            parallelism-min = 8
+
+            # Max number of threads to cap factor-based parallelism number to
+            parallelism-max = 64
           }
         }
       #default-config """
       val parsed = ConfigFactory.parseString(config)
-      val actorSystem = ActorSystem("test", parsed.getConfig("play"))
+      val actorSystem = ActorSystem("test", parsed.getConfig("akka"))
       actorSystem.shutdown()
       success
     }
@@ -91,23 +90,21 @@ object ThreadPoolsSpec extends PlaySpecification {
 
     "allow changing the default thread pool" in {
       val config = ConfigFactory.parseString("""#highly-synchronous
-      play {
-        akka {
-          akka.loggers = ["akka.event.slf4j.Slf4jLogger"]
-          loglevel = WARNING
-          actor {
-            default-dispatcher = {
-              fork-join-executor {
-                parallelism-min = 300
-                parallelism-max = 300
-              }
+      akka {
+        akka.loggers = ["akka.event.slf4j.Slf4jLogger"]
+        loglevel = WARNING
+        actor {
+          default-dispatcher = {
+            fork-join-executor {
+              parallelism-min = 300
+              parallelism-max = 300
             }
           }
         }
       }
       #highly-synchronous """)
 
-      val actorSystem = ActorSystem("test", config.getConfig("play"))
+      val actorSystem = ActorSystem("test", config.getConfig("akka"))
       actorSystem.shutdown()
       success
     }

@@ -1,17 +1,20 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package views.html.helper
 
 import org.specs2.mutable.Specification
+import play.api.{ Configuration, Environment }
 import play.api.data.Forms._
 import play.api.data._
-import play.api.i18n.Lang
+import play.api.i18n.{ DefaultLangs, DefaultMessagesApi, Lang }
 import play.twirl.api.Html
 import scala.beans.BeanProperty
 
 object HelpersSpec extends Specification {
   import FieldConstructor.defaultField
+  val messagesApi = new DefaultMessagesApi(Environment.simple(), Configuration.reference, new DefaultLangs(Configuration.reference))
+  implicit val messages = messagesApi.preferred(Seq.empty)
 
   "@inputText" should {
 

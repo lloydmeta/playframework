@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package com.typesafe.play.docs.sbtplugin
 
@@ -11,7 +11,7 @@ import org.pegdown.ast._
 import org.pegdown.ast.Node
 import org.pegdown.plugins.{ ToHtmlSerializerPlugin, PegDownPlugins }
 import org.pegdown._
-import play.sbtplugin.Colors
+import play.sbt.Colors
 import play.doc._
 import sbt.{ FileRepository => _, _ }
 import sbt.Keys._
@@ -81,6 +81,12 @@ object PlayDocsValidation {
     val relativeLinks = mutable.ListBuffer[LinkRef]()
     val externalLinks = mutable.ListBuffer[LinkRef]()
 
+    def stripFragment(path: String) = if (path.contains("#")) {
+      path.dropRight(path.length - path.indexOf('#'))
+    } else {
+      path
+    }
+
     def parseMarkdownFile(markdownFile: File): String = {
 
       val processor = new PegDownProcessor(Extensions.ALL, PegDownPlugins.builder()
@@ -90,13 +96,14 @@ object PlayDocsValidation {
       val linkRenderer = new LinkRenderer {
         override def render(node: WikiLinkNode) = {
           node.getText match {
-            case link if link.contains("|") => {
+
+            case link if link.contains("|") =>
               val parts = link.split('|')
               val desc = parts.head
-              val page = parts.tail.head.trim
+              val page = stripFragment(parts.tail.head.trim)
               wikiLinks += LinkRef(page, markdownFile, node.getStartIndex + desc.length + 3)
-            }
-            case image if image.endsWith(".png") => {
+
+            case image if image.endsWith(".png") =>
               image match {
                 case full if full.startsWith("http://") =>
                   externalLinks += LinkRef(full, markdownFile, node.getStartIndex + 2)
@@ -106,10 +113,10 @@ object PlayDocsValidation {
                   val link = markdownFile.getParentFile.getCanonicalPath.stripPrefix(base.getCanonicalPath).stripPrefix("/") + "/" + relative
                   resourceLinks += LinkRef(link, markdownFile, node.getStartIndex + 2)
               }
-            }
-            case link => {
+
+            case link =>
               wikiLinks += LinkRef(link.trim, markdownFile, node.getStartIndex + 2)
-            }
+
           }
           new LinkRenderer.Rendering("foo", "bar")
         }
@@ -121,6 +128,7 @@ object PlayDocsValidation {
           url match {
             case full if full.startsWith("http://") || full.startsWith("https://") =>
               externalLinks += LinkRef(full, markdownFile, node.getStartIndex + offset)
+            case fragment if fragment.startsWith("#") => // ignore fragments, no validation of them for now
             case relative => relativeLinks += LinkRef(relative, markdownFile, node.getStartIndex + offset)
           }
           new LinkRenderer.Rendering("foo", "bar")
@@ -381,18 +389,22 @@ object PlayDocsValidation {
       "Could not find source file")
 
     def segmentExists(sample: CodeSampleRef) = {
-      // Find the code segment
-      val sourceCode = {
-        val file = new File(base, sample.source)
-        if (file.exists()) {
-          IO.readLines(new File(base, sample.source))
-        } else {
-          docsJarRepo.loadFile(sample.source)(is => IO.readLines(new BufferedReader(new InputStreamReader(is)))).get
+      if (sample.segment.nonEmpty) {
+        // Find the code segment
+        val sourceCode = {
+          val file = new File(base, sample.source)
+          if (file.exists()) {
+            IO.readLines(new File(base, sample.source))
+          } else {
+            docsJarRepo.loadFile(sample.source)(is => IO.readLines(new BufferedReader(new InputStreamReader(is)))).get
+          }
         }
+        val notLabel = (s: String) => !s.contains("#" + sample.segment)
+        val segment = sourceCode dropWhile (notLabel) drop (1) takeWhile (notLabel)
+        !segment.isEmpty
+      } else {
+        true
       }
-      val notLabel = (s: String) => !s.contains("#" + sample.segment)
-      val segment = sourceCode dropWhile (notLabel) drop (1) takeWhile (notLabel)
-      !segment.isEmpty
     }
 
     assertLinksNotMissing("Missing source segments test", existing.collect {

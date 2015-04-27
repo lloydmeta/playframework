@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.mvc;
 
@@ -31,7 +31,7 @@ public class Security {
      */
     public static class AuthenticatedAction extends Action<Authenticated> {
         
-        public F.Promise<Result> call(Context ctx) {
+        public F.Promise<Result> call(final Context ctx) {
             try {
                 Authenticator authenticator = configuration.value().newInstance();
                 String username = authenticator.getUsername(ctx);
@@ -41,9 +41,22 @@ public class Security {
                 } else {
                     try {
                         ctx.request().setUsername(username);
-                        return delegate.call(ctx);
-                    } finally {
+                        return delegate.call(ctx).transform(
+                            new F.Function<Result, Result>() {
+                                @Override
+                                public Result apply(Result result) throws Throwable {
+                                    ctx.request().setUsername(null);
+                                    return result;
+                                }
+                            },
+                                throwable -> {
+                                    ctx.request().setUsername(null);
+                                    return throwable;
+                                }
+                        );
+                    } catch(Exception e) {
                         ctx.request().setUsername(null);
+                        throw e;
                     }
                 }
             } catch(RuntimeException e) {

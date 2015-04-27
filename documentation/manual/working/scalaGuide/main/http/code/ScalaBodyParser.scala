@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package scalaguide.http.scalabodyparsers {
 
@@ -100,7 +100,7 @@ import play.api.mvc._
     }
 
     def assertAction[A: Writeable, T: AsResult](action: EssentialAction, request: => FakeRequest[A], expectedResponse: Int = OK)(assertions: Future[Result] => T) = {
-      running(FakeApplication(additionalConfiguration = Map("application.secret" -> "pass"))) {
+      running(FakeApplication()) {
         val result = call(action, request)
         status(result) must_== expectedResponse
         assertions(result)

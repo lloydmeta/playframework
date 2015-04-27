@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.i18n
 
-import play.api.test.{ PlaySpecification, WithApplication, FakeApplication }
+import play.api.test.{ PlaySpecification, WithApplication }
 import play.api.mvc.Controller
 import play.api.i18n._
 import play.api.Mode
@@ -12,14 +12,17 @@ object MessagesSpec extends PlaySpecification with Controller {
 
   sequential
 
+  implicit val lang = Lang("en-US")
+  import play.api.i18n.Messages.Implicits.applicationMessages
+
   "Messages" should {
     "provide default messages" in new WithApplication() {
-      val msg = Messages("constraint.email")(Lang("en-US"))
+      val msg = Messages("constraint.email")
 
       msg must ===("Email")
     }
     "permit default override" in new WithApplication() {
-      val msg = Messages("constraint.required")(Lang("en-US"))
+      val msg = Messages("constraint.required")
 
       msg must ===("Required!")
     }

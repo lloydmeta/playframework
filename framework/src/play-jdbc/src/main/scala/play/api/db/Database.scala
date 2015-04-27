@@ -1,14 +1,16 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.db
 
 import java.sql.{ Connection, Driver, DriverManager }
 import javax.sql.DataSource
 
+import com.typesafe.config.Config
+
 import scala.util.control.{ NonFatal, ControlThrowable }
 
-import play.api.Configuration
+import play.api.{ Environment, PlayConfig, Configuration }
 import play.utils.{ ProxyDriver, Reflect }
 
 /**
@@ -38,7 +40,6 @@ trait Database {
    *
    * Don't forget to release the connection at some point by calling close().
    *
-   * @param autocommit determines whether to autocommit the connection
    * @return a JDBC connection
    */
   def getConnection(): Connection
@@ -95,40 +96,18 @@ trait Database {
 object Database {
 
   /**
-   * Create a pooled database with the given configuration.
-   *
-   * @param name the database name
-   * @param driver the database driver class
-   * @param url the database url
-   * @param config a map of extra database configuration
-   * @return a configured database
-   */
-  def apply(name: String, driver: String, url: String, config: Map[String, _ <: Any] = Map.empty): Database = {
-    val dbConfig = Configuration.from(Map("driver" -> driver, "url" -> url) ++ config)
-    new PooledDatabase(name, dbConfig)
-  }
-
-  /**
-   * Create a pooled database named "default" with the given configuration.
-   *
-   * @param driver the database driver class
-   * @param url the database url
-   * @param config a map of extra database configuration
-   * @return a configured database
-   */
-  def apply(driver: String, url: String, config: Map[String, _ <: Any]): Database = {
-    Database("default", driver, url, config)
-  }
-
-  /**
    * Create a pooled database named "default" with the given driver and url.
    *
    * @param driver the database driver class
    * @param url the database url
+   * @param name the database name
+   * @param config a map of extra database configuration
    * @return a configured database
    */
-  def apply(driver: String, url: String): Database = {
-    Database("default", driver, url, Map.empty)
+  def apply(driver: String, url: String, name: String = "default", config: Map[String, _ <: Any] = Map.empty): Database = {
+    val dbConfig = Configuration.reference.getConfig("play.db.prototype").get ++
+      Configuration.from(Map("driver" -> driver, "url" -> url) ++ config)
+    new PooledDatabase(name, dbConfig)
   }
 
   /**
@@ -143,16 +122,57 @@ object Database {
     val driver = "org.h2.Driver"
     val urlExtra = urlOptions.map { case (k, v) => k + "=" + v }.mkString(";", ";", "")
     val url = "jdbc:h2:mem:" + name + urlExtra
-    Database(name, driver, url, config)
+    Database(driver, url, name, config)
   }
 
+  /**
+   * Run the given block with a database, cleaning up afterwards.
+   *
+   * @param driver the database driver class
+   * @param url the database url
+   * @param name the database name
+   * @param config a map of extra database configuration
+   * @param block The block of code to run
+   * @return The result of the block
+   */
+  def withDatabase[T](driver: String, url: String, name: String = "default",
+    config: Map[String, _ <: Any] = Map.empty)(block: Database => T): T = {
+    val database = Database(driver, url, name, config)
+    try {
+      block(database)
+    } finally {
+      database.shutdown()
+    }
+  }
+
+  /**
+   * Run the given block with an in-memory h2 database, cleaning up afterwards.
+   *
+   * @param name the database name (defaults to "default")
+   * @param urlOptions a map of extra url options
+   * @param config a map of extra database configuration
+   * @param block The block of code to run
+   * @return The result of the block
+   */
+  def withInMemory[T](name: String = "default", urlOptions: Map[String, String] = Map.empty,
+    config: Map[String, _ <: Any] = Map.empty)(block: Database => T): T = {
+    val database = inMemory(name, urlOptions, config)
+    try {
+      block(database)
+    } finally {
+      database.shutdown()
+    }
+  }
 }
 
 /**
  * Default implementation of the database API.
  * Provides driver registration and connection methods.
  */
-abstract class DefaultDatabase(val name: String, configuration: Configuration, classLoader: ClassLoader) extends Database {
+abstract class DefaultDatabase(val name: String, configuration: Config, environment: Environment) extends Database {
+
+  private val config = PlayConfig(configuration)
+  val databaseConfig = DatabaseConfig.fromConfig(config, environment)
 
   // abstract methods to be implemented
 
@@ -162,16 +182,15 @@ abstract class DefaultDatabase(val name: String, configuration: Configuration, c
 
   // driver registration
 
-  lazy val driver: Driver = {
-    val driverClass = configuration.getString("driver").getOrElse {
-      throw configuration.reportError(name, s"Missing configuration [db.$name.driver]")
-    }
-    try {
-      val proxyDriver = new ProxyDriver(Reflect.createInstance[Driver](driverClass, classLoader))
-      DriverManager.registerDriver(proxyDriver)
-      proxyDriver
-    } catch {
-      case NonFatal(e) => throw configuration.reportError("driver", s"Driver not found: [$driverClass]", Some(e))
+  lazy val driver: Option[Driver] = {
+    databaseConfig.driver.map { driverClassName =>
+      try {
+        val proxyDriver = new ProxyDriver(Reflect.createInstance[Driver](driverClassName, environment.classLoader))
+        DriverManager.registerDriver(proxyDriver)
+        proxyDriver
+      } catch {
+        case NonFatal(e) => throw config.reportError("driver", s"Driver not found: [$driverClassName}]", Some(e))
+      }
     }
   }
 
@@ -241,7 +260,7 @@ abstract class DefaultDatabase(val name: String, configuration: Configuration, c
   }
 
   def deregisterDriver(): Unit = {
-    DriverManager.deregisterDriver(driver)
+    driver.foreach(DriverManager.deregisterDriver)
   }
 
 }
@@ -249,12 +268,12 @@ abstract class DefaultDatabase(val name: String, configuration: Configuration, c
 /**
  * Default implementation of the database API using a connection pool.
  */
-class PooledDatabase(name: String, configuration: Configuration, classLoader: ClassLoader, pool: ConnectionPool)
-    extends DefaultDatabase(name, configuration, classLoader) {
+class PooledDatabase(name: String, configuration: Config, environment: Environment, pool: ConnectionPool)
+    extends DefaultDatabase(name, configuration, environment) {
 
-  def this(name: String, configuration: Configuration) = this(name, configuration, classOf[PooledDatabase].getClassLoader, new BoneConnectionPool)
+  def this(name: String, configuration: Configuration) = this(name, configuration.underlying, Environment.simple(), new HikariCPConnectionPool(Environment.simple()))
 
-  def createDataSource(): DataSource = pool.create(name, configuration, classLoader)
+  def createDataSource(): DataSource = pool.create(name, databaseConfig, configuration)
 
   def closeDataSource(dataSource: DataSource): Unit = pool.close(dataSource)
 

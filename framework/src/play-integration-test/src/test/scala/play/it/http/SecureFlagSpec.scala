@@ -1,21 +1,25 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http
 
 import play.api.mvc._
 import play.api.test._
 import play.api.test.TestServer
+import play.it._
 import java.io.{ File, InputStream }
 import javax.net.ssl.{ SSLContext, HttpsURLConnection, X509TrustManager }
 import java.security.cert.X509Certificate
 import scala.io.Source
 import java.net.URL
 
+object NettySecureFlagSpec extends SecureFlagSpec with NettyIntegrationSpecification
+object AkkaHttpSecureFlagSpec extends SecureFlagSpec with AkkaHttpIntegrationSpecification
+
 /**
  * Specs for the "secure" flag on requests
  */
-object SecureFlagSpec extends PlaySpecification {
+trait SecureFlagSpec extends PlaySpecification with ServerIntegrationSpecification {
 
   sequential
 
@@ -45,19 +49,19 @@ object SecureFlagSpec extends PlaySpecification {
     "show that requests are secure in the absence of X_FORWARDED_PROTO" in withServer(secureFlagAction, Some(sslPort)) { _ =>
       val conn = createConn(sslPort)
       Source.fromInputStream(conn.getContent.asInstanceOf[InputStream]).getLines().next must_== "true"
-    }
+    }.pendingUntilAkkaHttpFixed // All these tests are waiting on Akka HTTP to support SSL
     "show that requests are secure in the absence of X_FORWARDED_PROTO" in withServer(secureFlagAction, Some(sslPort)) { _ =>
       val conn = createConn(sslPort)
       Source.fromInputStream(conn.getContent.asInstanceOf[InputStream]).getLines().next must_== "true"
-    }
+    }.pendingUntilAkkaHttpFixed
     "show that requests are secure if X_FORWARDED_PROTO is https" in withServer(secureFlagAction, Some(sslPort)) { _ =>
       val conn = createConn(sslPort, Some("https"))
       Source.fromInputStream(conn.getContent.asInstanceOf[InputStream]).getLines().next must_== "true"
-    }
+    }.pendingUntilAkkaHttpFixed
     "not show that requests are secure if X_FORWARDED_PROTO is http" in withServer(secureFlagAction, Some(sslPort)) { _ =>
       val conn = createConn(sslPort, Some("http"))
       Source.fromInputStream(conn.getContent.asInstanceOf[InputStream]).getLines().next must_== "false"
-    }
+    }.pendingUntilAkkaHttpFixed
   }
 
   "Play http server" should {

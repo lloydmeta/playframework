@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Integrating with JPA
 
 ## Adding dependencies to your project
@@ -10,7 +10,7 @@ There is no built-in JPA implementation in Play; you can choose any available im
 ```
 libraryDependencies ++= Seq(
   javaJpa,
-  "org.hibernate" % "hibernate-entitymanager" % "4.3.7.Final" // replace by your jpa implementation
+  "org.hibernate" % "hibernate-entitymanager" % "4.3.9.Final" // replace by your jpa implementation
 )
 ```
 

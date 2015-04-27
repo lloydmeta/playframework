@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package javaguide.akka.ask;
 
@@ -24,13 +24,8 @@ public class Application extends Controller {
     }
 
     public Promise<Result> sayHello(String name) {
-        return Promise.wrap(ask(helloActor, new SayHello(name), 1000)).map(
-                new Function<Object, Result>() {
-                    public Result apply(Object response) {
-                        return ok((String) response);
-                    }
-                }
-        );
+        return Promise.wrap(ask(helloActor, new SayHello(name), 1000))
+                .map(response -> ok((String) response));
     }
 }
 //#ask

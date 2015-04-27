@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.http
 
 import javax.inject.Inject
 
-import play.api.{ Configuration, Environment }
+import play.api.{ PlayConfig, Configuration, Environment }
 import play.api.mvc.EssentialFilter
 import play.utils.Reflect
 
@@ -24,7 +24,14 @@ object HttpFilters {
 
   def bindingsFromConfiguration(environment: Environment, configuration: Configuration) = {
     Reflect.bindingsFromConfiguration[HttpFilters, play.http.HttpFilters, JavaHttpFiltersAdapter, NoHttpFilters](environment,
-      configuration, "play.http.filters", "Filters")
+      PlayConfig(configuration), "play.http.filters", "Filters")
+  }
+
+  def apply(filters: EssentialFilter*): HttpFilters = {
+    val f = filters
+    new HttpFilters {
+      def filters = f
+    }
   }
 }
 

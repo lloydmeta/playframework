@@ -1,8 +1,14 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.filters.gzip
 
+import javax.inject.Inject
+
+import play.api.http.HttpFilters
+import play.api.inject._
+import play.api.inject.guice.GuiceApplicationBuilder
+import play.api.routing.Router
 import play.api.test._
 import play.api.mvc.{ HttpConnection, Action, Result }
 import play.api.mvc.Results._
@@ -133,12 +139,30 @@ object GzipFilterSpec extends PlaySpecification with DataTables {
       checkGzipped(result)
       header(VARY, result) must beSome.which(header => header contains "original,")
     }
+
+    "preserve original Vary header values and not duplicate case-insensitive ACCEPT-ENCODING" in withApplication(Ok("hello").withHeaders(VARY -> "original,ACCEPT-encoding")) {
+      val result = makeGzipRequest
+      checkGzipped(result)
+      header(VARY, result) must beSome.which(header => header.split(",").filter(_.toLowerCase == ACCEPT_ENCODING.toLowerCase()).size == 1)
+    }
   }
 
-  def withApplication[T](result: Result, buffer: Int = 1024)(block: => T): T = {
-    running(FakeApplication(withRoutes = {
-      case _ => new GzipFilter(gzip = Gzip.gzip(512), chunkedThreshold = buffer).apply(Action(result))
-    }))(block)
+  class Filters @Inject() (gzipFilter: GzipFilter) extends HttpFilters {
+    def filters = Seq(gzipFilter)
+  }
+
+  def withApplication[T](result: Result, chunkedThreshold: Int = 1024)(block: => T): T = {
+    running(new GuiceApplicationBuilder()
+      .configure(
+        "play.filters.gzip.chunkedThreshold" -> chunkedThreshold,
+        "play.filters.gzip.bufferSize" -> 512
+      ).overrides(
+          bind[Router].to(Router.from {
+            case _ => Action(result)
+          }),
+          bind[HttpFilters].to[Filters]
+        ).build()
+    )(block)
   }
 
   def gzipRequest = FakeRequest().withHeaders(ACCEPT_ENCODING -> "gzip")

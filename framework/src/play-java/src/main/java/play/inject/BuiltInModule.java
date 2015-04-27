@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.inject;
 
@@ -14,7 +14,7 @@ public class BuiltInModule extends play.api.inject.Module {
     public Seq<Binding<?>> bindings(Environment environment, Configuration configuration) {
         return seq(
           bind(ApplicationLifecycle.class).to(DelegateApplicationLifecycle.class),
-          bind(play.Configuration.class).toInstance(new play.Configuration(configuration)),
+          bind(play.Configuration.class).toProvider(ConfigurationProvider.class),
           bind(Crypto.class).toSelf()
         );
     }

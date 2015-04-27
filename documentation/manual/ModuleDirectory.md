@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com> -->
+<!--- Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com> -->
 # Play Modules
 
 > This is a temporary location for listing modules, until there will be a location to register them on the Play website.
@@ -57,8 +57,8 @@
 
 ## Currency Converter (Java)
 
-* **Website:** <https://github.com/blabluble/play-currency-converter-module>
-* **Documentation:** <https://github.com/blabluble/play-currency-converter-module/blob/master/README.md>
+* **Website:** <http://edulify.github.io/play-currency-converter-module.edulify.com/>
+* **Documentation:** <https://github.com/edulify/play-currency-converter-module.edulify.com/blob/master/README.md>
 * **Short description:** Currency converter for Play. It uses web services to get the current exchange rate.
 
 ## Deadbolt 2 Plugin
@@ -71,11 +71,11 @@
 
 ## Dust Plugin
 * **Website (docs, sample):** <https://github.com/typesafehub/play-plugins/tree/master/dust>
-* **Short description:** provides support for the dust client side template language
+* **Short description:** Provides support for the dust client side template language
 
 ## Google Closure Template Plugin
 * **Website (docs, sample):** [https://github.com/gawkermedia/play2-closure](https://github.com/gawkermedia/play2-closure)
-* **Short description:** provides support for Google Closure Templates
+* **Short description:** Provides support for Google Closure Templates
 
 ## Elasticsearch
 
@@ -110,9 +110,9 @@
 
 ## Geolocation (Java)
 
-* **Website:** <https://github.com/blabluble/play-geolocation-module>
-* **Documentation:** <https://github.com/blabluble/play-geolocation-module/blob/master/README.md>
-* **Short description:** Module for retrieve Geolocation data based on IP.
+* **Website:** <http://edulify.github.io/play-geolocation-module.edulify.com/>
+* **Documentation:** <https://github.com/edulify/play-geolocation-module.edulify.com/blob/master/README.md>
+* **Short description:** Module to retrieve Geolocation data based on IP.
 
 ## Google's HTML Compressor (Java and Scala)
 * **Website:** <https://github.com/mohiva/play-html-compressor>
@@ -134,17 +134,17 @@
 
 ## Guice Plugin (Java and Scala)
 * **Website (docs, sample):** <https://github.com/typesafehub/play-plugins/tree/master/guice>
-* **Short description:** provides DI via Guice
+* **Short description:** Provides DI via Guice
 
 ## HTML5 Tags module (Java and Scala)
 * **Website:** <https://github.com/loicdescotte/Play2-HTML5Tags>
 * **Documentation:** <https://github.com/loicdescotte/Play2-HTML5Tags/blob/master/README.md>
-* **Short description:** This tags add client side validation capabilities, based on model constraints (e.g required, email pattern, max|min lentgh...) and specific input fields (date, telephone number, url...) to Play templates
+* **Short description:** These tags add client side validation capabilities, based on model constraints (e.g required, email pattern, max|min lentgh...) and specific input fields (date, telephone number, url...) to Play templates
 
 ## InputValidator (Scala)
 
 * **Website:** <https://github.com/seratch/inputvalidator/tree/master/play-module>
-* **Short description:** provides a simple validation API for Play
+* **Short description:** Provides a simple validation API for Play
 
 ## JackRabbit Plugin (Java and Scala)
 * **Website (docs, sample):** [JackRabbit Plugin GitHub](https://github.com/sgougi/play21-jackrabbit-plugin)
@@ -180,12 +180,12 @@
 
 ## Manual Dependency Injection Plugin (Java and Scala)
 * **Website (docs, sample):** <https://github.com/typesafehub/play-plugins>
-* **Short description:** provides DI via manual injection
+* **Short description:** Provides DI via manual injection
 
 ## Memcached Plugin
 
 * **Website:** <https://github.com/mumoshu/play2-memcached>
-* **Short description:** provides a memcached based cache implementation
+* **Short description:** Provides a memcached based cache implementation
 
 ## Messages Compiler Plugin (Scala)
 
@@ -196,19 +196,19 @@
 ## MongoDB Jackson Mapper Plugin (Java)
 
 * **Website (docs, sample):** <https://github.com/vznet/play-mongo-jackson-mapper>
-* **Short description:** provides managed MongoDB access and object mapping using Jackson annotations
+* **Short description:** Provides managed MongoDB access and object mapping using Jackson annotations
 
 ## MongoDB Jongo Plugin (Java)
 * **Website (docs, sample):** <https://github.com/alexanderjarvis/play-jongo>
-* **Short description:** provides managed MongoDB access and object mapping using [Jongo](http://jongo.org/)
+* **Short description:** Provides managed MongoDB access and object mapping using [Jongo](http://jongo.org/)
 
 ## MongoDB Morphia Plugin (Java)
 * **Website (docs, sample):** <https://github.com/leodagdag/play2-morphia-plugin>
-* **Short description:** provides managed MongoDB access and object mapping via Morphia
+* **Short description:** Provides managed MongoDB access and object mapping via Morphia
 
 ## MongoDB Salat, Casbah Plugin (Scala)
 * **Website (docs, sample):** <https://github.com/leon/play-salat>
-* **Short description:** provides managed MongoDB access and object mapping using Salat and Casbah 
+* **Short description:** Provides managed MongoDB access and object mapping using Salat and Casbah 
 
 ## Mountable routing
 
@@ -230,7 +230,7 @@
 
 ## NINA (Scala)
 * **Website (docs, sample):** <https://github.com/dontcare4free/nina>
-* **Short description:** provides a typesafe way to query SQL databases with a special emphasis on selective querying
+* **Short description:** Provides a typesafe way to query SQL databases with a special emphasis on selective querying
 
 ## Origami: OrientDB O/G Mapper (Java and Scala)
 * **Website (docs, sample):** [Origami Plugin GitHub](https://github.com/sgougi/play21-origami-plugin)
@@ -238,9 +238,8 @@
 
 ## PDF module (Java)
 
-* **Website:** <https://github.com/joergviola/play20-pdf>
-* **Documentation:** <https://github.com/joergviola/play20-pdf/blob/master/README.md>
-* **Repository:** <http://www.joergviola.de/releases/>
+* **Website:** <https://github.com/innoveit/play2-pdf>
+* **Documentation:** <https://github.com/innoveit/play2-pdf/blob/master/README.md>
 * **Short description** Generate PDF output from HTML templates
 
 ## Play! Authenticate (Java)
@@ -278,7 +277,7 @@
 ## Play Dok
 
 * **Website:** <http://www.applidok.com>
-* **Documentation:** <https://github.com/applicius/play-dok/>
+* **Documentation:** <https://github.com/cchantep/play-dok/>
 * **Short description:** Library to integrate Applidok PDF templating service with your Play application.
 
 ## Qunit (Java)
@@ -289,20 +288,20 @@
 
 ## Redis Plugin  (Java and Scala)
 * **Website (docs, sample):** <https://github.com/typesafehub/play-plugins>
-* **Short description:** provides a redis based cache implementation, also lets you use Redis specific APIs
+* **Short description:** Provides a redis based cache implementation, also lets you use Redis specific APIs
 
 ## Swaggerkit (Scala)
 * **Website (docs, sample, code):** https://github.com/eamelink/swaggerkit
 * **Short description:** Helps you expose a [Swagger](http://swagger.wordnik.com/) specification of a JSON REST API built with Play in a clean way.
 
 ## Emailer Plugin  (Java and Scala)
-* **Website (docs, sample):** <https://github.com/typesafehub/play-plugins>
-* **Short description:** provides an emailer based on apache commons-email
+* **Website (docs, sample):** <https://github.com/playframework/play-mailer>
+* **Short description:** Provides an emailer based on apache commons-email
 
 ## Roy Compiled Asset Plugin (Ray)
 * **Website:** <https://github.com/pufuwozu/ray>
 * **Blog post:** <http://brianmckenna.org/blog/ray>
-* **Short description:** compiles [Roy](http://roy.brianmckenna.org/) files to JavaScript
+* **Short description:** Compiles [Roy](http://roy.brianmckenna.org/) files to JavaScript
 
 ## Sass Plugin
 * **Website:** <https://github.com/jlitola/play-sass>
@@ -311,7 +310,7 @@
 ## ScalikeJDBC Plugin (Scala)
 
 * **Website:** <https://github.com/scalikejdbc/scalikejdbc-play-support>
-* **Short description:** provides yet another database access API for Play
+* **Short description:** Provides yet another database access API for Play
 
 ## SecureSocial (Java and Scala)
 
@@ -321,18 +320,18 @@
 ## Silhouette (Scala)
 
 * **Website:** <http://silhouette.mohiva.com/>
-* **Documentation:** <https://github.com/mohiva/play-silhouette/wiki>
-* **Short description:** An authentication library that supports several authentication methods, including OAuth1, OAuth2, OpenID, Credentials or custom authentication schemes.
+* **Documentation:** <http://silhouette.mohiva.com/docs/>
+* **Short description:** An authentication library that supports several authentication methods, including OAuth1, OAuth2, OpenID, Credentials, Basic Authentication, Two Factor Authentication or custom authentication schemes.
 
 ## Sitemap Generator (Java)
 
-* **Website:** <https://github.com/blabluble/play-sitemap-module>
-* **Documentation:** <https://github.com/blabluble/play-sitemap-module/blob/master/README.md>
+* **Website:** <http://edulify.github.io/play-sitemap-module.edulify.com/>
+* **Documentation:** <https://github.com/edulify/play-sitemap-module.edulify.com/blob/master/README.md>
 * **Short description:** Automatic [sitemaps](http://www.sitemaps.org/) generator for Play
 
 ## Snapshot Plugin (Java and Scala)
 * **Website (docs, sample):** <https://github.com/vznet/play-snapshot>
-* **Short description:** provides a hash bang snapshot functionality using HtmlUnit, as described by Google [here](https://developers.google.com/webmasters/ajax-crawling/docs/html-snapshot)
+* **Short description:** Provides a hash bang snapshot functionality using HtmlUnit, as described by Google [here](https://developers.google.com/webmasters/ajax-crawling/docs/html-snapshot)
 
 ## socket.io.play (scala only, pre-alpha)
 
@@ -346,7 +345,7 @@
 
 ## Statsd Plugin (Java and Scala)
 * **Website (docs, sample):** <https://github.com/vznet/play-statsd>
-* **Short description:** provides a statsd client
+* **Short description:** Provides a statsd client
 
 ## Stylus Plugin
 
@@ -359,11 +358,11 @@
 
 ## Typesafe util Plugin (Scala)
 * **Website (docs, sample):** <https://github.com/typesafehub/play-plugins>
-* **Short description:** provides request header based security and syntactic sugar to deal with plugins
+* **Short description:** Provides request header based security and syntactic sugar to deal with plugins
 
 ## Typesafe SbtGoodies Plugin 
 * **Website (docs, sample):** <https://github.com/typesafehub/play-plugins/tree/master/sbtgoodies>
-* **Short description:** provides extra sbt commands
+* **Short description:** Provides extra sbt commands
 
 ## TypeScript Plugin
 * **Website:** <https://github.com/mumoshu/play2-typescript>
@@ -386,3 +385,9 @@
 * **Website:** http://literalice.github.com/play-xwiki-rendering/
 * **Documentation:** https://github.com/literalice/play-xwiki-rendering/
 * **Short description:** XWiki Rendering Framework integration for Play
+
+## Thymeleaf module (Scala)
+* **Website:**  https://github.com/dmitraver/scala-play-thymeleaf-plugin
+* **Documentation:** https://github.com/dmitraver/scala-play-thymeleaf-plugin/blob/master/README.md
+* **Short description:** Allows to use [Thymeleaf](http://www.thymeleaf.org/) template engine as an alternative
+to Twirl

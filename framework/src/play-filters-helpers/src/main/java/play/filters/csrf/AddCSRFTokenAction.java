@@ -1,31 +1,40 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.filters.csrf;
 
+import java.util.concurrent.Callable;
 import play.api.mvc.RequestHeader;
 import play.api.mvc.Session;
 import play.libs.F;
+import play.libs.Scala;
 import play.mvc.Action;
 import play.mvc.Http;
 import play.mvc.Result;
 import scala.Option;
 import scala.Tuple2;
 
+import javax.inject.Inject;
+
 public class AddCSRFTokenAction extends Action<AddCSRFToken> {
 
-    private final String tokenName = CSRFConf$.MODULE$.TokenName();
-    private final Option<String> cookieName = CSRFConf$.MODULE$.CookieName();
-    private final boolean secureCookie = CSRFConf$.MODULE$.SecureCookie();
+    private final CSRFConfig config;
+    private final CSRF.TokenProvider tokenProvider;
+
+    @Inject
+    public AddCSRFTokenAction(CSRFConfig config, CSRF.TokenProvider tokenProvider) {
+        this.config = config;
+        this.tokenProvider = tokenProvider;
+    }
+
     private final String requestTag = CSRF.Token$.MODULE$.RequestTag();
     private final CSRFAction$ CSRFAction = CSRFAction$.MODULE$;
-    private final CSRF.TokenProvider tokenProvider = CSRFConf$.MODULE$.defaultTokenProvider();
 
     @Override
     public F.Promise<Result> call(Http.Context ctx) throws Throwable {
         RequestHeader request = ctx._requestHeader();
 
-        if (CSRFAction.getTokenFromHeader(request, tokenName, cookieName).isEmpty()) {
+        if (CSRFAction.getTokenFromHeader(request, config).isEmpty()) {
             // No token in header and we have to create one if not found, so create a new token
             String newToken = tokenProvider.generateToken();
 
@@ -36,7 +45,8 @@ public class AddCSRFTokenAction extends Action<AddCSRFToken> {
             final RequestHeader newRequest = request.copy(request.id(),
                     request.tags().$plus(new Tuple2<String, String>(requestTag, newToken)),
                     request.uri(), request.path(), request.method(), request.version(), request.queryString(),
-                    request.headers(), request.remoteAddress(), request.secure());
+                    request.headers(), Scala.asScala((Callable<String>) () -> request.remoteAddress()),
+                    Scala.asScala((Callable<Object>) () -> request.secure()));
 
             // Create a new context that will have the new RequestHeader.  This ensures that the CSRF.getToken call
             // used in templates will find the token.
@@ -50,12 +60,12 @@ public class AddCSRFTokenAction extends Action<AddCSRFToken> {
             Http.Context.current.set(newCtx);
 
             // Also add it to the response
-            if (cookieName.isDefined()) {
+            if (config.cookieName().isDefined()) {
                 Option<String> domain = Session.domain();
-                ctx.response().setCookie(cookieName.get(), newToken, null, Session.path(),
-                        domain.isDefined() ? domain.get() : null, secureCookie, false);
+                ctx.response().setCookie(config.cookieName().get(), newToken, null, Session.path(),
+                        domain.isDefined() ? domain.get() : null, config.secureCookie(), config.httpOnlyCookie());
             } else {
-                ctx.session().put(tokenName, newToken);
+                ctx.session().put(config.tokenName(), newToken);
             }
 
             return delegate.call(newCtx);

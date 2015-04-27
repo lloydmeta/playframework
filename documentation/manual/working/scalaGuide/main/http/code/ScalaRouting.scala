@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package scalaguide.http.routing
 
@@ -8,7 +8,7 @@ import play.api.test.FakeRequest
 import play.api.mvc._
 import play.api.test.Helpers._
 import play.api.test._
-import play.core.Router
+import play.api.routing.Router
 
 package controllers {
 
@@ -138,7 +138,7 @@ object ScalaRoutingSpec extends Specification {
 
   }
 
-  def contentOf(rh: RequestHeader, router: Class[_ <: Router.Routes] = classOf[Routes]) = {
+  def contentOf(rh: RequestHeader, router: Class[_ <: Router] = classOf[Routes]) = {
     val app = FakeApplication()
     running(app) {
       contentAsString(app.injector.instanceOf(router).routes(rh) match {

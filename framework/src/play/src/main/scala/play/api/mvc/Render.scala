@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.mvc
 
@@ -7,7 +7,6 @@ import play.api.http.MediaRange
 import play.api.mvc.Results._
 import play.api.http.HeaderNames._
 import scala.concurrent.Future
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 trait Rendering {
 
@@ -39,6 +38,7 @@ trait Rendering {
       val result =
         if (request.acceptedTypes.isEmpty) _render(Seq(new MediaRange("*", "*", Nil, None, Nil)))
         else _render(request.acceptedTypes)
+      import play.api.libs.iteratee.Execution.Implicits.trampoline
       result.withHeaders(VARY -> ACCEPT)
     }
 
@@ -70,6 +70,7 @@ trait Rendering {
       val result =
         if (request.acceptedTypes.isEmpty) _render(Seq(new MediaRange("*", "*", Nil, None, Nil)))
         else _render(request.acceptedTypes)
+      import play.api.libs.iteratee.Execution.Implicits.trampoline
       result.map(_.withHeaders(VARY -> ACCEPT))
     }
   }

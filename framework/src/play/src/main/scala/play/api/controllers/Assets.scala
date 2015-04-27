@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package controllers
 
@@ -11,15 +11,16 @@ import java.io._
 import java.net.{ URL, URLConnection, JarURLConnection }
 import org.joda.time.format.{ DateTimeFormatter, DateTimeFormat }
 import org.joda.time.DateTimeZone
-import play.utils.{ InvalidUriEncodingException, UriEncoding }
+import play.utils.{ Resources, InvalidUriEncodingException, UriEncoding }
 import scala.concurrent.{ ExecutionContext, Promise, Future, blocking }
 import scala.util.control.NonFatal
 import scala.util.{ Success, Failure }
 import java.util.Date
+import java.util.regex.Pattern
 import play.api.libs.iteratee.Execution.Implicits
 import play.api.http.{ LazyHttpErrorHandler, HttpErrorHandler, ContentTypes }
 import scala.collection.concurrent.TrieMap
-import play.core.Router.ReverseRouteContext
+import play.core.routing.ReverseRouteContext
 import scala.io.Source
 import javax.inject.{ Inject, Singleton }
 
@@ -90,27 +91,48 @@ private[controllers] object AssetInfo {
 
   lazy val digestAlgorithm = config(_.getString("assets.digest.algorithm")).getOrElse("md5")
 
-  val timeZoneCode = "GMT"
+  import ResponseHeader.basicDateFormatPattern
 
-  val parsableTimezoneCode = " " + timeZoneCode
+  val standardDateParserWithoutTZ: DateTimeFormatter =
+    DateTimeFormat.forPattern(basicDateFormatPattern).withLocale(java.util.Locale.ENGLISH).withZone(DateTimeZone.UTC)
+  val alternativeDateFormatWithTZOffset: DateTimeFormatter =
+    DateTimeFormat.forPattern("EEE MMM dd yyyy HH:mm:ss 'GMT'Z").withLocale(java.util.Locale.ENGLISH).withZone(DateTimeZone.UTC).withOffsetParsed
 
-  val df: DateTimeFormatter =
-    DateTimeFormat.forPattern("EEE, dd MMM yyyy HH:mm:ss '" + timeZoneCode + "'").withLocale(java.util.Locale.ENGLISH).withZone(DateTimeZone.forID(timeZoneCode))
-
-  val dfp: DateTimeFormatter =
-    DateTimeFormat.forPattern("EEE, dd MMM yyyy HH:mm:ss").withLocale(java.util.Locale.ENGLISH).withZone(DateTimeZone.forID(timeZoneCode))
+  /**
+   * A regex to find two types of date format. This regex silently ignores any
+   * trailing info such as extra header attributes ("; length=123") or
+   * timezone names ("(Pacific Standard Time").
+   * - "Sat, 18 Oct 2014 20:41:26" and "Sat, 29 Oct 1994 19:43:31 GMT" use the first
+   *   matcher. (The " GMT" is discarded to give them the same format.)
+   * - "Wed Jan 07 2015 22:54:20 GMT-0800" uses the second matcher.
+   */
+  private val dateRecognizer = Pattern.compile(
+    """^(((\w\w\w, \d\d \w\w\w \d\d\d\d \d\d:\d\d:\d\d)(( GMT)?))|""" +
+      """(\w\w\w \w\w\w \d\d \d\d\d\d \d\d:\d\d:\d\d GMT.\d\d\d\d))(\b.*)""")
 
   /*
    * jodatime does not parse timezones, so we handle that manually
    */
-  def parseModifiedDate(date: String): Option[Date] = try {
-    // IE sends "; length=xxx" with If-Modified-Since header
-    val d = dfp.parseDateTime(date.replace(parsableTimezoneCode, "").split(";", 2).head).toDate
-    Some(d)
-  } catch {
-    case e: IllegalArgumentException =>
-      Logger.debug(s"An invalidate date was received: $date", e)
+  def parseModifiedDate(date: String): Option[Date] = {
+    val matcher = dateRecognizer.matcher(date)
+    if (matcher.matches()) {
+      val standardDate = matcher.group(3)
+      try {
+        if (standardDate != null) {
+          Some(standardDateParserWithoutTZ.parseDateTime(standardDate).toDate)
+        } else {
+          val alternativeDate = matcher.group(6) // Cannot be null otherwise match would have failed
+          Some(alternativeDateFormatWithTZOffset.parseDateTime(alternativeDate).toDate)
+        }
+      } catch {
+        case e: IllegalArgumentException =>
+          Logger.debug(s"An invalid date was received: couldn't parse: $date", e)
+          None
+      }
+    } else {
+      Logger.debug(s"An invalid date was received: unrecognized format: $date")
       None
+    }
   }
 }
 
@@ -124,6 +146,7 @@ private[controllers] class AssetInfo(
     val digest: Option[String]) {
 
   import AssetInfo._
+  import ResponseHeader._
 
   def addCharsetIfNeeded(mimeType: String): String =
     if (MimeTypes.isText(mimeType)) s"$mimeType; charset=$defaultCharSet" else mimeType
@@ -147,13 +170,13 @@ private[controllers] class AssetInfo(
           try {
             f(urlConnection)
           } finally {
-            urlConnection.getInputStream.close()
+            Resources.closeUrlConnection(urlConnection)
           }
-      }.filterNot(_ == -1).map(df.print)
+      }.filterNot(_ == -1).map(httpDateFormat.print)
     }
 
     url.getProtocol match {
-      case "file" => Some(df.print(new File(url.getPath).lastModified))
+      case "file" => Some(httpDateFormat.print(new File(url.toURI).lastModified))
       case "jar" => getLastModified[JarURLConnection](c => c.getJarEntry.getTime)
       case "bundle" => getLastModified[URLConnection](c => c.getLastModified)
       case _ => None
@@ -274,7 +297,7 @@ object Assets extends AssetsBuilder(LazyHttpErrorHandler) {
     }
   }
 
-  private[controllers] def assetInfoForRequest(request: Request[_], name: String): Future[Option[(AssetInfo, Boolean)]] = {
+  private[controllers] def assetInfoForRequest(request: RequestHeader, name: String): Future[Option[(AssetInfo, Boolean)]] = {
     val gzipRequested = request.headers.get(ACCEPT_ENCODING).exists(_.split(',').exists(_.trim == "gzip"))
     assetInfo(name).map(_.map(_ -> gzipRequested))(Implicits.trampoline)
   }
@@ -322,10 +345,9 @@ class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
 
   import Assets._
   import AssetInfo._
+  import ResponseHeader._
 
-  private def currentTimeFormatted: String = df.print((new Date).getTime)
-
-  private def maybeNotModified(request: Request[_], assetInfo: AssetInfo, aggressiveCaching: Boolean): Option[Result] = {
+  private def maybeNotModified(request: RequestHeader, assetInfo: AssetInfo, aggressiveCaching: Boolean): Option[Result] = {
     // First check etag. Important, if there is an If-None-Match header, we MUST not check the
     // If-Modified-Since header, regardless of whether If-None-Match matches or not. This is in
     // accordance with section 14.26 of RFC2616.
@@ -339,7 +361,7 @@ class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
           lastModified <- assetInfo.parsedLastModified
           if !lastModified.after(ifModifiedSince)
         } yield {
-          NotModified.withHeaders(DATE -> currentTimeFormatted)
+          NotModified
         }
     }
   }
@@ -368,8 +390,7 @@ class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
         OK,
         Map(
           CONTENT_LENGTH -> length.toString,
-          CONTENT_TYPE -> mimeType,
-          DATE -> currentTimeFormatted
+          CONTENT_TYPE -> mimeType
         )
       ),
       resourceData)
@@ -385,7 +406,7 @@ class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
   /**
    * Generates an `Action` that serves a versioned static resource.
    */
-  def versioned(path: String, file: Asset): Action[AnyContent] = {
+  def versioned(path: String, file: Asset): Action[AnyContent] = Action.async { implicit request =>
     val f = new File(file.name)
     // We want to detect if it's a fingerprinted asset, because if it's fingerprinted, we can aggressively cache it,
     // otherwise we can't.
@@ -394,11 +415,11 @@ class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
       val bareFile = new File(f.getParent, f.getName.drop(requestedDigest.size + 1)).getPath
       val bareFullPath = new File(path + File.separator + bareFile).getPath
       blocking(digest(bareFullPath)) match {
-        case Some(`requestedDigest`) => at(path, bareFile, aggressiveCaching = true)
-        case _ => at(path, file.name)
+        case Some(`requestedDigest`) => assetAt(path, bareFile, aggressiveCaching = true)
+        case _ => assetAt(path, file.name, false)
       }
     } else {
-      at(path, file.name)
+      assetAt(path, file.name, false)
     }
   }
 
@@ -409,18 +430,28 @@ class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
    * @param file the file part extracted from the URL. May be URL encoded (note that %2F decodes to literal /).
    * @param aggressiveCaching if true then an aggressive set of caching directives will be used. Defaults to false.
    */
-  def at(path: String, file: String, aggressiveCaching: Boolean = false): Action[AnyContent] = Action.async {
-    implicit request =>
+  def at(path: String, file: String, aggressiveCaching: Boolean = false): Action[AnyContent] = Action.async { implicit request =>
+    assetAt(path, file, aggressiveCaching)
+  }
 
-      import Implicits.trampoline
-      val assetName: Option[String] = resourceNameAt(path, file)
-      val assetInfoFuture: Future[Option[(AssetInfo, Boolean)]] = assetName.map { name =>
-        assetInfoForRequest(request, name)
-      } getOrElse Future.successful(None)
+  private def assetAt(path: String, file: String, aggressiveCaching: Boolean)(implicit request: RequestHeader): Future[Result] = {
+    import Implicits.trampoline
+    val assetName: Option[String] = resourceNameAt(path, file)
+    val assetInfoFuture: Future[Option[(AssetInfo, Boolean)]] = assetName.map { name =>
+      assetInfoForRequest(request, name)
+    } getOrElse Future.successful(None)
 
-      val pendingResult: Future[Result] = assetInfoFuture.flatMap {
-        case Some((assetInfo, gzipRequested)) =>
-          val stream = assetInfo.url(gzipRequested).openStream()
+    def notFound = errorHandler.onClientError(request, NOT_FOUND, "Resource not found by Assets controller")
+
+    val pendingResult: Future[Result] = assetInfoFuture.flatMap {
+      case Some((assetInfo, gzipRequested)) =>
+        val connection = assetInfo.url(gzipRequested).openConnection()
+        // Make sure it's not a directory
+        if (Resources.isUrlConnectionADirectory(connection)) {
+          Resources.closeUrlConnection(connection)
+          notFound
+        } else {
+          val stream = connection.getInputStream
           val length = stream.available
           val resourceData = Enumerator.fromStream(stream)(Implicits.defaultExecutionContext)
 
@@ -431,16 +462,17 @@ class AssetsBuilder(errorHandler: HttpErrorHandler) extends Controller {
               result(file, length, assetInfo.mimeType, resourceData, gzipRequested, assetInfo.gzipUrl.isDefined)
             )
           })
-        case None => errorHandler.onClientError(request, NOT_FOUND, "Resource not found by Assets controller")
-      }
+        }
+      case None => notFound
+    }
 
-      pendingResult.recoverWith {
-        case e: InvalidUriEncodingException =>
-          errorHandler.onClientError(request, BAD_REQUEST, s"Invalid URI encoding for $file at $path: " + e.getMessage)
-        case NonFatal(e) =>
-          // Add a bit more information to the exception for better error reporting later
-          errorHandler.onServerError(request, new RuntimeException(s"Unexpected error while serving $file at $path: " + e.getMessage, e))
-      }
+    pendingResult.recoverWith {
+      case e: InvalidUriEncodingException =>
+        errorHandler.onClientError(request, BAD_REQUEST, s"Invalid URI encoding for $file at $path: " + e.getMessage)
+      case NonFatal(e) =>
+        // Add a bit more information to the exception for better error reporting later
+        errorHandler.onServerError(request, new RuntimeException(s"Unexpected error while serving $file at $path: " + e.getMessage, e))
+    }
   }
 
   /**

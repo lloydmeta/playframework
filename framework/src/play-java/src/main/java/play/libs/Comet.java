@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.libs;
 
@@ -97,6 +97,8 @@ public abstract class Comet extends Chunks<String> {
      */
     static final class WhenConnectedComet extends Comet {
 
+        private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Comet.class);
+
         private final Callback<Comet> callback;
 
         WhenConnectedComet(String jsMethod, Callback<Comet> callback) {
@@ -110,7 +112,7 @@ public abstract class Comet extends Chunks<String> {
             try {
                 callback.invoke(this);
             } catch (Throwable e) {
-                play.PlayInternal.logger().error("Exception in Comet.onConnected", e);
+                logger.error("Exception in Comet.onConnected", e);
             }
         }
     }

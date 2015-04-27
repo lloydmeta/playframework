@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package scalaguide.advanced.dependencyinjection
 
@@ -20,7 +20,7 @@ object CompileTimeDependencyInjection extends Specification {
       )
       val application = ApplicationLoader(context).load(context)
       application must beAnInstanceOf[Application]
-      application.routes must be(play.core.Router.Null)
+      application.routes.documentation must beEmpty
     }
     "allow using other components" in {
       val context = ApplicationLoader.createContext(environment)
@@ -32,7 +32,7 @@ object CompileTimeDependencyInjection extends Specification {
       val context = ApplicationLoader.createContext(environment)
       val components = new routers.MyComponents(context)
       components.application must beAnInstanceOf[Application]
-      components.routes must beAnInstanceOf[scalaguide.advanced.dependencyinjection.Routes]
+      components.router must beAnInstanceOf[scalaguide.advanced.dependencyinjection.Routes]
     }
   }
 
@@ -43,7 +43,7 @@ package basic {
 //#basic
 import play.api._
 import play.api.ApplicationLoader.Context
-import play.core.Router
+import play.api.routing.Router
 
 class MyApplicationLoader extends ApplicationLoader {
   def load(context: Context) = {
@@ -52,7 +52,7 @@ class MyApplicationLoader extends ApplicationLoader {
 }
 
 class MyComponents(context: Context) extends BuiltInComponentsFromContext(context) {
-  lazy val routes = Router.Null
+  lazy val router = Router.empty
 }
 //#basic
 
@@ -62,14 +62,14 @@ package messages {
 
 import play.api._
 import play.api.ApplicationLoader.Context
-import play.core.Router
+import play.api.routing.Router
 
 //#messages
 import play.api.i18n._
 
 class MyComponents(context: Context) extends BuiltInComponentsFromContext(context)
                                      with I18nComponents {
-  lazy val routes = Router.Null
+  lazy val router = Router.empty
 
   lazy val myComponent = new MyComponent(messagesApi)
 }
@@ -85,11 +85,15 @@ package routers {
 
 import scalaguide.advanced.dependencyinjection.controllers
 import scalaguide.advanced.dependencyinjection.bar
-import scalaguide.advanced.dependencyinjection.Routes
+
+object router {
+  type Routes = scalaguide.advanced.dependencyinjection.Routes
+}
 
 //#routers
 import play.api._
 import play.api.ApplicationLoader.Context
+import router.Routes
 
 class MyApplicationLoader extends ApplicationLoader {
   def load(context: Context) = {
@@ -99,7 +103,7 @@ class MyApplicationLoader extends ApplicationLoader {
 
 class MyComponents(context: Context) extends BuiltInComponentsFromContext(context) {
 
-  lazy val routes = new Routes(httpErrorHandler, applicationController, barRoutes, assets)
+  lazy val router = new Routes(httpErrorHandler, applicationController, barRoutes, assets)
 
   lazy val barRoutes = new bar.Routes(httpErrorHandler)
   lazy val applicationController = new controllers.Application()

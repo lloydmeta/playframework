@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.core.parsers
 
@@ -35,6 +35,20 @@ object FormUrlEncodedParser {
 
     // Group the pairs by the key (first item of the pair) being sure to preserve insertion order
     play.utils.OrderPreserving.groupBy(pairs)(_._1)
+  }
+
+  /**
+   * Parse the content type "application/x-www-form-urlencoded", mapping to a Java compatible format.
+   * @param data
+   * @param encoding
+   * @return
+   */
+  def parseAsJava(data: String, encoding: String): java.util.Map[String, java.util.List[String]] = {
+    import scala.collection.JavaConverters._
+    parse(data, encoding).map {
+      case (key, values) =>
+        key -> values.asJava
+    }.asJava
   }
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api
 
@@ -172,16 +172,6 @@ object Logger extends LoggerLike {
   import ch.qos.logback.classic.{ Level => LogbackLevel }
 
   /**
-   * Initialize the Logger when there's no application ClassLoader available.
-   */
-  def init(rootPath: java.io.File, mode: Mode.Mode): Unit = {
-    val properties = Map("application.home" -> rootPath.getAbsolutePath)
-    val resourceName = if (mode == Mode.Dev) "logback-play-dev.xml" else "logback-play-default.xml"
-    val resourceUrl = Option(Logger.getClass.getClassLoader.getResource(resourceName))
-    configure(properties, resourceUrl, levels = Map.empty)
-  }
-
-  /**
    * The 'application' logger.
    */
   val logger = LoggerFactory.getLogger("application")
@@ -203,25 +193,20 @@ object Logger extends LoggerLike {
   def apply[T](clazz: Class[T]): Logger = new Logger(LoggerFactory.getLogger(clazz))
 
   /**
+   * Initialize the Logger when there's no application ClassLoader available.
+   */
+  def init(rootPath: java.io.File, mode: Mode.Mode): Unit = {
+    val properties = Map("application.home" -> rootPath.getAbsolutePath)
+    val resourceName = if (mode == Mode.Dev) "logback-play-dev.xml" else "logback-play-default.xml"
+    val resourceUrl = Option(Logger.getClass.getClassLoader.getResource(resourceName))
+    configure(properties, resourceUrl)
+  }
+
+  /**
    * Reconfigures the underlying logback infrastructure.
    */
-  def configure(env: Environment, configuration: Configuration): Unit = {
+  def configure(env: Environment): Unit = {
     val properties = Map("application.home" -> env.rootPath.getAbsolutePath)
-
-    val validValues = Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF", "INHERITED")
-
-    val setLevel = (level: String) => level match {
-      case "INHERITED" => null
-      case level => LogbackLevel.toLevel(level)
-    }
-
-    val levels = configuration.getConfig("logger").map { loggerConfig =>
-      loggerConfig.keys.map {
-        case "resource" | "file" | "url" => "" -> null
-        case key @ "root" => "ROOT" -> loggerConfig.getString(key, Some(validValues)).map(setLevel).get
-        case key => key -> loggerConfig.getString(key, Some(validValues)).map(setLevel).get
-      }.toMap
-    }.getOrElse(Map.empty)
 
     // Get an explicitly configured resource URL
     // Fallback to a file in the conf directory if the resource wasn't found on the classpath
@@ -244,13 +229,13 @@ object Logger extends LoggerLike {
 
     val configUrl = explicitResourceUrl orElse explicitFileUrl orElse resourceUrl
 
-    configure(properties, configUrl, levels)
+    configure(properties, configUrl)
   }
 
   /**
    * Reconfigures the underlying logback infrastructure.
    */
-  def configure(properties: Map[String, String], config: Option[URL], levels: Map[String, LogbackLevel]): Unit = {
+  def configure(properties: Map[String, String], config: Option[URL]): Unit = synchronized {
     // Redirect JUL -> SL4FJ
     {
       import org.slf4j.bridge._
@@ -298,10 +283,6 @@ object Logger extends LoggerLike {
           case NonFatal(e) =>
             System.err.println("Error encountered while configuring logback:")
             e.printStackTrace()
-        }
-
-        levels.foreach {
-          case (logger, level) => ctx.getLogger(logger).setLevel(level)
         }
 
         StatusPrinter.printIfErrorsOccured(ctx)

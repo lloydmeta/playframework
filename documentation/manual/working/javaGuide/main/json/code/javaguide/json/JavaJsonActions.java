@@ -1,6 +1,6 @@
 package javaguide.json;
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 
 import java.util.ArrayList;
@@ -80,14 +80,14 @@ public class JavaJsonActions extends WithApplication {
     @Test
     public void requestAsAnyContentAction() {
         assertThat(contentAsString(
-            call(new JsonRequestAsJsonAction(), fakeRequest().withJsonBody(Json.parse("{\"name\":\"Greg\"}")))
+            call(new JsonRequestAsJsonAction(), fakeRequest().bodyJson(Json.parse("{\"name\":\"Greg\"}")))
         ), equalTo("Hello Greg"));
     }
 
     @Test
     public void requestAsJsonAction() {
         assertThat(contentAsString(
-            call(new JsonRequestAsJsonAction(), fakeRequest().withJsonBody(Json.parse("{\"name\":\"Greg\"}")))
+            call(new JsonRequestAsJsonAction(), fakeRequest().bodyJson(Json.parse("{\"name\":\"Greg\"}")))
         ), equalTo("Hello Greg"));
     }
 

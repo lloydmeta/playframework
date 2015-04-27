@@ -1,5 +1,7 @@
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
+libraryDependencies += specs2 % Test
+
 scalaVersion := sys.props.get("scala.version").getOrElse("2.10.4")
 
 // can't use test directory since scripted calls its script "test"
@@ -36,4 +38,23 @@ compile in Compile := {
       throw inc
     case Value(v) => v
   }
+}
+
+scalacOptions ++= {
+  Seq(
+    "-deprecation",
+    "-encoding", "UTF-8",
+    "-feature",
+    "-language:existentials",
+    "-language:higherKinds",
+    "-language:implicitConversions",
+    "-unchecked",
+    "-Xfatal-warnings",
+    "-Xlint",
+    "-Yno-adapted-args",
+    "-Ywarn-dead-code",
+    "-Ywarn-numeric-widen",
+    "-Ywarn-value-discard",
+    "-Xfuture"
+  )
 }

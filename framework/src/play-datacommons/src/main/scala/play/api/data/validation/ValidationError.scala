@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.api.data.validation
 
@@ -9,5 +9,14 @@ package play.api.data.validation
  * @param message the error message
  * @param args the error message arguments
  */
-case class ValidationError(message: String, args: Any*)
+case class ValidationError(messages: Seq[String], args: Any*) {
 
+  lazy val message = messages.last
+
+}
+
+object ValidationError {
+
+  def apply(message: String, args: Any*) = new ValidationError(Seq(message), args: _*)
+
+}

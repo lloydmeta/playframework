@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package javaguide.http.def;
 
@@ -7,7 +7,7 @@ package javaguide.http.def;
 import play.*;
 import play.api.OptionalSourceMapper;
 import play.api.UsefulException;
-import play.core.Router;
+import play.api.routing.Router;
 import play.http.DefaultHttpErrorHandler;
 import play.libs.F.*;
 import play.mvc.Http.*;
@@ -19,7 +19,7 @@ public class ErrorHandler extends DefaultHttpErrorHandler {
 
     @Inject
     public ErrorHandler(Configuration configuration, Environment environment,
-                        OptionalSourceMapper sourceMapper, Provider<Router.Routes> routes) {
+                        OptionalSourceMapper sourceMapper, Provider<Router> routes) {
         super(configuration, environment, sourceMapper, routes);
     }
 

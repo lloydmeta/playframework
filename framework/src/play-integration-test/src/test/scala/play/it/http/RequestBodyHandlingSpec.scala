@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 Typesafe Inc. <http://www.typesafe.com>
+ * Copyright (C) 2009-2015 Typesafe Inc. <http://www.typesafe.com>
  */
 package play.it.http
 
@@ -7,10 +7,14 @@ import play.api.mvc._
 import play.api.test._
 import play.api.test.TestServer
 import play.api.libs.iteratee._
+import play.it._
 import scala.concurrent.ExecutionContext.Implicits._
 import scala.util.Random
 
-object RequestBodyHandlingSpec extends PlaySpecification {
+object NettyRequestBodyHandlingSpec extends RequestBodyHandlingSpec with NettyIntegrationSpecification
+object AkkaHttpRequestBodyHandlingSpec extends RequestBodyHandlingSpec with AkkaHttpIntegrationSpecification
+
+trait RequestBodyHandlingSpec extends PlaySpecification with ServerIntegrationSpecification {
 
   "Play request body handling" should {
 
